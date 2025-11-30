@@ -15,7 +15,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
 }
 
 .login-box {
@@ -61,24 +61,25 @@ body {
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: #3b82f6;
 }
 
 .btn-primary {
   width: 100%;
   padding: 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #f97316 100%);
   color: white;
   border: none;
   border-radius: 5px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.2s;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
 }
 
 .error {
@@ -111,24 +112,30 @@ body {
 
 /* Navbar */
 .navbar {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
   color: white;
   padding: 15px 30px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  gap: 30px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
 .nav-brand {
   font-size: 24px;
   font-weight: 700;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .nav-links {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  justify-content: center;
+  flex: 1;
 }
 
 .nav-links button {
@@ -147,8 +154,9 @@ body {
 }
 
 .nav-links button.active {
-  background: rgba(255, 255, 255, 0.4);
+  background: rgba(249, 115, 22, 0.9);
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .nav-user {
@@ -169,6 +177,22 @@ body {
 
 .btn-logout:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+.btn-theme-toggle {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.2s;
+  font-size: 18px;
+}
+
+.btn-theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
 }
 
 /* Main Content */
@@ -198,11 +222,21 @@ body {
   padding: 30px;
   border-radius: 10px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  border-left: 4px solid #667eea;
+  border-left: 4px solid #3b82f6;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
 }
 
 .stat-card.alert {
-  border-left-color: #ff6b6b;
+  border-left-color: #f97316;
+}
+
+.stat-card.alert:hover {
+  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.2);
 }
 
 .stat-card h3 {
@@ -289,4 +323,237 @@ body {
   .data-table td {
     padding: 8px;
   }
+}
+
+/* Dark Mode */
+body.dark-mode {
+  background: #1a1a1a;
+  color: #e0e0e0;
+}
+
+body.dark-mode .app {
+  background: #1a1a1a;
+}
+
+body.dark-mode .main-content {
+  background: #1a1a1a;
+}
+
+/* Login Page Dark Mode */
+body.dark-mode .login-container {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+}
+
+body.dark-mode .login-box {
+  background: #2a2a2a;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+}
+
+body.dark-mode .login-box h1,
+body.dark-mode .login-box h2 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .login-hint {
+  border-top-color: #444;
+  color: #999;
+}
+
+body.dark-mode .form-group label {
+  color: #e0e0e0;
+}
+
+body.dark-mode .form-group input,
+body.dark-mode .form-group select,
+body.dark-mode .form-group textarea {
+  background: #333;
+  color: #e0e0e0;
+  border-color: #555;
+}
+
+body.dark-mode .form-group input:focus,
+body.dark-mode .form-group select:focus,
+body.dark-mode .form-group textarea:focus {
+  border-color: #3b82f6;
+  background: #3a3a3a;
+}
+
+/* Dashboard Dark Mode */
+body.dark-mode .dashboard h1,
+body.dark-mode .view h1,
+body.dark-mode .view h3,
+body.dark-mode .view h4 {
+  color: #e0e0e0;
+}
+
+body.dark-mode .stat-card {
+  background: #2a2a2a;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .stat-card:hover {
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+body.dark-mode .stat-card.alert:hover {
+  box-shadow: 0 4px 15px rgba(249, 115, 22, 0.3);
+}
+
+body.dark-mode .stat-card h3 {
+  color: #999;
+}
+
+body.dark-mode .stat-number {
+  color: #e0e0e0;
+}
+
+/* Views Dark Mode */
+body.dark-mode .view {
+  background: #2a2a2a;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Data Table Dark Mode */
+body.dark-mode .data-table thead {
+  background: #333;
+}
+
+body.dark-mode .data-table th {
+  color: #e0e0e0;
+  border-bottom-color: #444;
+}
+
+body.dark-mode .data-table td {
+  color: #b0b0b0;
+  border-bottom-color: #444;
+}
+
+body.dark-mode .data-table tbody tr:hover {
+  background: #333;
+}
+
+/* Forms Dark Mode */
+body.dark-mode div[style*="background: rgb(248, 249, 250)"],
+body.dark-mode div[style*="background:#f8f9fa"],
+body.dark-mode div[style*="background: #f8f9fa"] {
+  background: #1f1f1f !important;
+}
+
+body.dark-mode div[style*="background: rgb(255, 255, 255)"],
+body.dark-mode div[style*="background:white"],
+body.dark-mode div[style*="background: white"] {
+  background: #2a2a2a !important;
+}
+
+body.dark-mode div[style*="border: 1px solid rgb(221, 221, 221)"],
+body.dark-mode div[style*="border:1px solid #ddd"],
+body.dark-mode div[style*="border: 1px solid #ddd"] {
+  border-color: #555 !important;
+}
+
+body.dark-mode input[style*="border: 1px solid rgb(221, 221, 221)"],
+body.dark-mode input[style*="border:1px solid #ddd"],
+body.dark-mode input[style*="border: 1px solid #ddd"],
+body.dark-mode select[style*="border: 1px solid rgb(221, 221, 221)"],
+body.dark-mode select[style*="border:1px solid #ddd"],
+body.dark-mode select[style*="border: 1px solid #ddd"],
+body.dark-mode textarea[style*="border: 1px solid rgb(221, 221, 221)"],
+body.dark-mode textarea[style*="border:1px solid #ddd"],
+body.dark-mode textarea[style*="border: 1px solid #ddd"] {
+  background: #333 !important;
+  color: #e0e0e0 !important;
+  border-color: #555 !important;
+}
+
+/* Inline styled inputs in forms that might not have border in attribute */
+body.dark-mode div[style*="background: rgb(248, 249, 250)"] input,
+body.dark-mode div[style*="background: #f8f9fa"] input,
+body.dark-mode div[style*="background: rgb(255, 255, 255)"] input,
+body.dark-mode div[style*="background: white"] input {
+  background: #333 !important;
+  color: #e0e0e0 !important;
+  border-color: #555 !important;
+}
+
+body.dark-mode div[style*="background: rgb(248, 249, 250)"] select,
+body.dark-mode div[style*="background: #f8f9fa"] select,
+body.dark-mode div[style*="background: rgb(255, 255, 255)"] select,
+body.dark-mode div[style*="background: white"] select {
+  background: #333 !important;
+  color: #e0e0e0 !important;
+  border-color: #555 !important;
+}
+
+body.dark-mode div[style*="background: rgb(248, 249, 250)"] textarea,
+body.dark-mode div[style*="background: #f8f9fa"] textarea,
+body.dark-mode div[style*="background: rgb(255, 255, 255)"] textarea,
+body.dark-mode div[style*="background: white"] textarea {
+  background: #333 !important;
+  color: #e0e0e0 !important;
+  border-color: #555 !important;
+}
+
+body.dark-mode div[style*="background: rgb(248, 249, 250)"] h3,
+body.dark-mode div[style*="background: #f8f9fa"] h3,
+body.dark-mode div[style*="background: rgb(255, 255, 255)"] h3,
+body.dark-mode div[style*="background: white"] h3,
+body.dark-mode div[style*="background: rgb(248, 249, 250)"] h4,
+body.dark-mode div[style*="background: #f8f9fa"] h4,
+body.dark-mode div[style*="background: rgb(255, 255, 255)"] h4,
+body.dark-mode div[style*="background: white"] h4 {
+  color: #e0e0e0 !important;
+}
+
+/* Inline styled buttons in forms */
+body.dark-mode button[style*="background: #6c757d"],
+body.dark-mode button[style*="background:#6c757d"],
+body.dark-mode button[style*="background: rgb(108, 117, 125)"] {
+  background: #4a5568 !important;
+}
+
+body.dark-mode button[style*="background: #28a745"],
+body.dark-mode button[style*="background:#28a745"],
+body.dark-mode button[style*="background: rgb(40, 167, 69)"] {
+  background: #2d7a3e !important;
+}
+
+body.dark-mode button[style*="background: #dc3545"],
+body.dark-mode button[style*="background:#dc3545"],
+body.dark-mode button[style*="background: rgb(220, 53, 69)"] {
+  background: #a82835 !important;
+}
+
+body.dark-mode button[style*="background: #3b82f6"],
+body.dark-mode button[style*="background:#3b82f6"],
+body.dark-mode button[style*="background: rgb(59, 130, 246)"] {
+  background: #2563eb !important;
+}
+
+/* Success/Error Messages Dark Mode */
+body.dark-mode .error {
+  background: #3d1a1a;
+  color: #ff6b6b;
+  border: 1px solid #5a2424;
+}
+
+body.dark-mode div[style*="background: #d4edda"] {
+  background: #1a3d2a !important;
+  color: #4ade80 !important;
+  border: 1px solid #245a3d !important;
+}
+
+/* Small text Dark Mode */
+body.dark-mode small,
+body.dark-mode p[style*="color: #6c757d"] {
+  color: #999 !important;
+}
+
+/* Table nested styles Dark Mode */
+body.dark-mode table[style*="background: white"] {
+  background: #2a2a2a !important;
+}
+
+body.dark-mode th[style*="borderBottom"],
+body.dark-mode th[style*="border-bottom"] {
+  border-bottom-color: #444 !important;
 }

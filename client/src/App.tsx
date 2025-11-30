@@ -16,6 +16,20 @@ function App() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [activeView, setActiveView] = useState('dashboard');
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved ? JSON.parse(saved) : false;
+  });
+
+  // Apply dark mode theme
+  useEffect(() => {
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    localStorage.setItem('darkMode', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   // Check if user is logged in
   useEffect(() => {
@@ -35,6 +49,10 @@ function App() {
       }
     }
   }, [token]);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +79,7 @@ function App() {
     return (
       <div className="login-container">
         <div className="login-box">
-          <h1>Kudos Inventory System</h1>
+          <img src="/logo-full.png" alt="Kudos Inventory System" style={{ width: '300px', marginBottom: '20px' }} />
           <h2>Login</h2>
           <form onSubmit={handleLogin}>
             <div className="form-group">
@@ -100,7 +118,10 @@ function App() {
   return (
     <div className="app">
       <nav className="navbar">
-        <div className="nav-brand">Kudos Inventory</div>
+        <div className="nav-brand">
+          <img src="/logo.png" alt="Kudos Logo" style={{ height: '80px', marginRight: '10px' }} />
+          <span>Kudos Inventory</span>
+        </div>
         <div className="nav-links">
           <button onClick={() => setActiveView('dashboard')} className={activeView === 'dashboard' ? 'active' : ''}>
             Dashboard
@@ -136,6 +157,9 @@ function App() {
           )}
         </div>
         <div className="nav-user">
+          <button onClick={toggleDarkMode} className="btn-theme-toggle" title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+            {darkMode ? '☀️' : '🌙'}
+          </button>
           <span>{user?.name} ({user?.role})</span>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
@@ -421,7 +445,7 @@ function MaterialsView() {
                   <td>{material.minStock}</td>
                   <td>{material.active ? 'Active' : 'Inactive'}</td>
                   <td>
-                    <button onClick={() => handleEdit(material)} style={{padding: '5px 10px', background: '#667eea', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
+                    <button onClick={() => handleEdit(material)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
                       ✏️ Edit
                     </button>
                   </td>
@@ -627,7 +651,7 @@ function ProductsView() {
                   <td>{product.uom}</td>
                   <td>{product.active ? 'Active' : 'Inactive'}</td>
                   <td>
-                    <button onClick={() => handleEdit(product)} style={{padding: '5px 10px', background: '#667eea', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
+                    <button onClick={() => handleEdit(product)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
                       ✏️ Edit
                     </button>
                   </td>
@@ -925,7 +949,7 @@ function ReceiptsView() {
                     onClick={() => toggleExpand(receipt.id)}
                     style={{
                       padding: '5px 10px',
-                      background: '#667eea',
+                      background: '#3b82f6',
                       color: 'white',
                       border: 'none',
                       borderRadius: '3px',
@@ -1488,7 +1512,7 @@ function ShipmentsView() {
                     onClick={() => toggleExpand(shipment.id)}
                     style={{
                       padding: '5px 10px',
-                      background: '#667eea',
+                      background: '#3b82f6',
                       color: 'white',
                       border: 'none',
                       borderRadius: '3px',
@@ -1944,7 +1968,7 @@ function LocationsView({ currentUserRole }: { currentUserRole?: string }) {
                   <td>{location.description || ''}</td>
                   {isAdmin && (
                     <td>
-                      <button onClick={() => handleEdit(location)} style={{padding: '5px 10px', background: '#667eea', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
+                      <button onClick={() => handleEdit(location)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
                         ✏️ Edit
                       </button>
                     </td>
@@ -2180,7 +2204,7 @@ function UsersView({ currentUserRole }: { currentUserRole?: string }) {
                   <td>{new Date(user.createdAt).toLocaleDateString()}</td>
                   {isAdmin && (
                     <td>
-                      <button onClick={() => handleEditUser(user)} style={{padding: '5px 10px', background: '#667eea', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>
+                      <button onClick={() => handleEditUser(user)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>
                         ✏️ Edit
                       </button>
                       {passwordChangeUserId === user.id ? (
@@ -2242,7 +2266,7 @@ function UsersView({ currentUserRole }: { currentUserRole?: string }) {
                           }}
                           style={{
                             padding: '5px 10px',
-                            background: '#667eea',
+                            background: '#3b82f6',
                             color: 'white',
                             border: 'none',
                             borderRadius: '3px',
@@ -2303,7 +2327,7 @@ function AuditLogView() {
       case 'DELETE': return '#dc3545';
       case 'LOGIN': return '#17a2b8';
       case 'LOGOUT': return '#6c757d';
-      default: return '#667eea';
+      default: return '#3b82f6';
     }
   };
 
