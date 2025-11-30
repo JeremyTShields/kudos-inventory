@@ -35,3 +35,14 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db
+
+# Docker
+docker-compose.override.yml
+
+# Backup files
+*.backup
+client/src/App.tsx.backup
+
+# Misc
+nul
+.cache/

@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  database:
+    image: mysql:8.0
+    container_name: kudos-database
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-kudos}
+      MYSQL_USER: ${DB_USER:-kudos_user}
+      MYSQL_PASSWORD: ${DB_PASS:-kudos_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - kudos-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  # Backend API
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: kudos-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-kudos}
+      DB_USER: ${DB_USER:-kudos_user}
+      DB_PASS: ${DB_PASS:-kudos_password}
+      JWT_SECRET: ${JWT_SECRET:-change-this-secret-key-in-production}
+      JWT_EXPIRES: ${JWT_EXPIRES:-24h}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - kudos-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: kudos-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:4000}
+    depends_on:
+      - backend
+    networks:
+      - kudos-network
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  kudos-network:
+    driver: bridge

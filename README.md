@@ -107,15 +107,38 @@ kudos-inventory/
 │   │   ├── middleware/  # Auth & validation
 │   │   ├── services/    # Business logic
 │   │   └── config/      # Configuration
+│   ├── Dockerfile       # Backend Docker config
 │   └── package.json
 ├── client/              # Frontend application
 │   ├── src/
 │   │   ├── api/        # API client
+│   │   ├── components/ # Reusable components
+│   │   │   ├── Login.tsx
+│   │   │   ├── Navbar.tsx
+│   │   │   └── views/  # Feature views
+│   │   ├── types/      # TypeScript definitions
 │   │   ├── App.tsx     # Main component
 │   │   └── App.css     # Styles
+│   ├── Dockerfile       # Frontend Docker config
+│   ├── nginx.conf       # Nginx configuration
 │   └── package.json
+├── docker-compose.yml   # Full-stack Docker setup
+├── DEPLOYMENT.md        # Deployment guide
+├── QUICK_DEPLOY.md      # Quick deployment guide
 └── README.md
 ```
+
+## Deployment
+
+Ready to deploy to production? See our deployment guides:
+
+- **[QUICK_DEPLOY.md](QUICK_DEPLOY.md)** - Quick deployment guide (Docker, Cloud platforms, VPS)
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Comprehensive deployment documentation
+
+### Quick Options:
+- **Docker Compose**: `docker-compose up -d` (easiest for local/VPS)
+- **Cloud Platform**: Deploy frontend to Vercel, backend to Railway (free tiers available)
+- **Traditional VPS**: Ubuntu server with Nginx and PM2
 
 ## API Documentation
 
