@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { login, register, getAllUsers, changePassword, updateUser } from '../controllers/auth.controller';
+import { requireAuth, requireRole } from '../middleware/auth';
+const r = Router();
+r.post('/login', login);
+r.post('/register', requireAuth, requireRole('ADMIN'), register);
+r.get('/users', requireAuth, getAllUsers);
+r.put('/users/:userId', requireAuth, requireRole('ADMIN'), updateUser);
+r.put('/users/:userId/password', requireAuth, requireRole('ADMIN'), changePassword);
+export default r;
