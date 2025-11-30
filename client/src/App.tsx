@@ -78,6 +78,13 @@ function App() {
   if (!token) {
     return (
       <div className="login-container">
+        <button
+          onClick={toggleDarkMode}
+          className="btn-theme-toggle-login"
+          title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {darkMode ? '☀️' : '🌙'}
+        </button>
         <div className="login-box">
           <img src="/logo-full.png" alt="Kudos Inventory System" style={{ width: '300px', marginBottom: '20px' }} />
           <h2>Login</h2>
