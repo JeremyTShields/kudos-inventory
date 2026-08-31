@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "dist/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "vitest run",
     "dev": "ts-node-dev --respawn src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
@@ -22,6 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.15.3",
     "sequelize": "^6.37.7",
+    "sqlite3": "^6.0.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -30,7 +31,13 @@
     "@types/express": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.9.2",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  },
+  "allowScripts": {
+    "sqlite3@6.0.1": true
   }
 }
