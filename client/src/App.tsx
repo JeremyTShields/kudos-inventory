@@ -36,9 +36,11 @@ function App() {
   // Check if user is logged in
   useEffect(() => {
     if (token) {
-      // Decode JWT to get user info (simple decode, not verification)
+      // Decode JWT to get user info (simple decode, not verification).
+      // JWT segments are base64url encoded, so map -/_ back to +// for atob.
       try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
+        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(base64));
         setUser({
           id: payload.sub,
           email: payload.email,

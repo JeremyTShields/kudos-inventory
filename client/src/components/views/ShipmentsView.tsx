@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import apiClient from '../../api/client';
 
 // Shipments View
@@ -274,8 +274,8 @@ function ShipmentsView() {
         </thead>
         <tbody>
           {shipments.map(shipment => (
-            <>
-              <tr key={shipment.id}>
+            <Fragment key={shipment.id}>
+              <tr>
                 <td>{shipment.id}</td>
                 <td>{shipment.customerName}</td>
                 <td>{new Date(shipment.shippedAt).toLocaleDateString()}</td>
@@ -320,7 +320,7 @@ function ShipmentsView() {
                   </td>
                 </tr>
               )}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>

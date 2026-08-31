@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import apiClient from '../../api/client';
 
 function ReceiptsView() {
@@ -273,8 +273,8 @@ function ReceiptsView() {
         </thead>
         <tbody>
           {receipts.map(receipt => (
-            <>
-              <tr key={receipt.id}>
+            <Fragment key={receipt.id}>
+              <tr>
                 <td>{receipt.id}</td>
                 <td>{receipt.supplierName}</td>
                 <td>{new Date(receipt.receivedAt).toLocaleDateString()}</td>
@@ -319,7 +319,7 @@ function ReceiptsView() {
                   </td>
                 </tr>
               )}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>
