@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
-import { QueryTypes } from 'sequelize';
+import { Op, QueryTypes } from 'sequelize';
 import { logAudit } from '../services/auditLog';
 
 export const getCurrentStock = async (req: Request, res: Response) => {
@@ -133,10 +133,10 @@ export const getTransactionHistory = async (req: Request, res: Response) => {
     if (itemId) where.itemId = itemId;
     if (locationId) where.locationId = locationId;
     if (startDate) {
-      where.occurredAt = { ...where.occurredAt, $gte: new Date(startDate as string) };
+      where.occurredAt = { ...where.occurredAt, [Op.gte]: new Date(startDate as string) };
     }
     if (endDate) {
-      where.occurredAt = { ...where.occurredAt, $lte: new Date(endDate as string) };
+      where.occurredAt = { ...where.occurredAt, [Op.lte]: new Date(endDate as string) };
     }
 
     const transactions = await sequelize.models.InventoryTxn.findAll({
@@ -159,25 +159,24 @@ export const getLowStockMaterials = async (req: Request, res: Response) => {
       where: { active: true }
     });
 
+    // Calculate current stock for all materials in a single grouped query
+    const stockRows: any[] = await sequelize.query(`
+      SELECT itemId, SUM(qty) as totalStock
+      FROM inventory_txns
+      WHERE itemType = 'MATERIAL'
+      GROUP BY itemId
+    `, { type: QueryTypes.SELECT });
+
+    const stockByMaterialId = new Map<number, number>(
+      stockRows.map(row => [Number(row.itemId), parseFloat(row.totalStock) || 0])
+    );
+
     const lowStockItems = [];
 
     for (const material of materials) {
       const materialData = material.get() as any;
       const minStock = parseFloat(materialData.minStock) || 0;
-
-      // Calculate current stock across all locations
-      const query = `
-        SELECT SUM(qty) as totalStock
-        FROM inventory_txns
-        WHERE itemType = 'MATERIAL' AND itemId = :itemId
-      `;
-
-      const result: any = await sequelize.query(query, {
-        replacements: { itemId: materialData.id },
-        type: QueryTypes.SELECT
-      });
-
-      const totalStock = result[0]?.totalStock ? parseFloat(result[0].totalStock) : 0;
+      const totalStock = stockByMaterialId.get(materialData.id) || 0;
 
       if (totalStock < minStock) {
         lowStockItems.push({
@@ -203,10 +202,10 @@ export const getUserActivity = async (req: Request, res: Response) => {
     const where: any = {};
     if (userId) where.userId = userId;
     if (startDate) {
-      where.occurredAt = { ...where.occurredAt, $gte: new Date(startDate as string) };
+      where.occurredAt = { ...where.occurredAt, [Op.gte]: new Date(startDate as string) };
     }
     if (endDate) {
-      where.occurredAt = { ...where.occurredAt, $lte: new Date(endDate as string) };
+      where.occurredAt = { ...where.occurredAt, [Op.lte]: new Date(endDate as string) };
     }
 
     const transactions = await sequelize.models.InventoryTxn.findAll({
@@ -244,7 +243,7 @@ export const getUserActivity = async (req: Request, res: Response) => {
 export const createInventoryAdjustment = async (req: Request, res: Response) => {
   try {
     const { itemType, itemId, locationId, qty, notes } = req.body;
-    const userId = (req as any).user.sub;
+    const userId = req.user!.sub;
 
     if (!itemType || !itemId || !locationId || qty === undefined) {
       return res.status(400).json({
@@ -275,18 +274,19 @@ export const createInventoryAdjustment = async (req: Request, res: Response) => 
       return res.status(404).json({ error: 'Location not found' });
     }
 
-    // Create inventory adjustment transaction
+    // Create inventory adjustment transaction. Manual adjustments have no
+    // source document, so entityType is MANUAL with a placeholder entityId;
+    // the reason/notes are preserved in the audit log below.
     const adjustment = await sequelize.models.InventoryTxn.create({
       txnType: 'ADJUST',
-      entityType: 'ADJUSTMENT',
-      entityId: null,
+      entityType: 'MANUAL',
+      entityId: 0,
       itemType,
       itemId,
       qty: parseFloat(qty),
       locationId,
       userId,
-      occurredAt: new Date(),
-      notes: notes || 'Manual inventory adjustment'
+      occurredAt: new Date()
     });
 
     // Log audit

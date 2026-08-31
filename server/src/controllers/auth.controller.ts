@@ -15,20 +15,34 @@ export async function register(req: Request, res: Response) {
     role?: 'ADMIN' | 'ASSOCIATE';
   };
 
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Name, email, and password are required' });
+  }
+  if (role && role !== 'ADMIN' && role !== 'ASSOCIATE') {
+    return res.status(400).json({ message: 'Role must be ADMIN or ASSOCIATE' });
+  }
+
   const passwordHash = await hash(password);
 
-  const newUser = await User.create({
-    name,
-    email,
-    passwordHash,
-    role: role || 'ASSOCIATE',
-  });
+  let newUser;
+  try {
+    newUser = await User.create({
+      name,
+      email,
+      passwordHash,
+      role: role || 'ASSOCIATE',
+    });
+  } catch (error: any) {
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({ message: 'Email already in use' });
+    }
+    throw error;
+  }
 
-  // Cast to any here to satisfy TS
-  const id = (newUser as any).id as number;
+  const id = newUser.get('id') as number;
 
   // Log audit - use the creating user's ID if available, otherwise the new user's ID
-  const actorId = (req as any).user?.sub || id;
+  const actorId = req.user?.sub || id;
   await logAudit({
     userId: actorId,
     action: 'CREATE',
@@ -53,6 +67,11 @@ export async function login(req: Request, res: Response) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
+  // Deactivated accounts must not be able to sign in
+  if (Number(user.get('active') ?? 1) === 0) {
+    return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
   const ok = await compare(
     password,
     user.get('passwordHash') as string
@@ -63,7 +82,7 @@ export async function login(req: Request, res: Response) {
   }
 
   const payload: AccessTokenPayload = {
-    sub: (user as any).id as number,            // cast for TS
+    sub: user.get('id') as number,
     email: user.get('email') as string,
     role: user.get('role') as 'ADMIN' | 'ASSOCIATE',
   };
@@ -110,7 +129,7 @@ export async function changePassword(req: Request, res: Response) {
   await user.update({ passwordHash });
 
   // Log audit
-  const actorId = (req as any).user?.sub || parseInt(userId);
+  const actorId = req.user?.sub || parseInt(userId);
   await logAudit({
     userId: actorId,
     action: 'UPDATE',
@@ -126,6 +145,10 @@ export async function changePassword(req: Request, res: Response) {
 export async function updateUser(req: Request, res: Response) {
   const { userId } = req.params;
   const { name, email, role } = req.body as { name?: string; email?: string; role?: string };
+
+  if (role && role !== 'ADMIN' && role !== 'ASSOCIATE') {
+    return res.status(400).json({ message: 'Role must be ADMIN or ASSOCIATE' });
+  }
 
   const user = await User.findByPk(userId);
 
@@ -148,7 +171,7 @@ export async function updateUser(req: Request, res: Response) {
   });
 
   // Log audit
-  const actorId = (req as any).user?.sub || parseInt(userId);
+  const actorId = req.user?.sub || parseInt(userId);
   await logAudit({
     userId: actorId,
     action: 'UPDATE',

@@ -7,7 +7,13 @@ export const getAllReceipts = async (req: Request, res: Response) => {
   try {
     const receipts = await sequelize.models.Receipt.findAll({
       order: [['receivedAt', 'DESC']],
-      include: [{ model: sequelize.models.ReceiptLine }]
+      include: [{
+        model: sequelize.models.ReceiptLine,
+        include: [
+          { model: sequelize.models.Material },
+          { model: sequelize.models.Location }
+        ]
+      }]
     });
     res.json(receipts);
   } catch (error) {
@@ -40,7 +46,7 @@ export const createReceipt = async (req: Request, res: Response) => {
 
   try {
     const { supplierName, receivedAt, lines } = req.body;
-    const userId = (req as any).user.sub;
+    const userId = req.user!.sub;
 
     if (!supplierName || !receivedAt || !lines || !Array.isArray(lines) || lines.length === 0) {
       await t.rollback();

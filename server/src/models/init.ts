@@ -136,8 +136,4 @@ export function initModels(sequelize: Sequelize) {
     User, Material, Product, BomItem, Location, Receipt, ReceiptLine,
     ProductionRun, Shipment, ShipmentLine, InventoryTxn, RefreshToken, AuditLog
   });
-
-  if (process.env.NODE_ENV === 'development') {
-    sequelize.sync(); // For Conveniance
-  }
 }

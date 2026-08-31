@@ -7,7 +7,13 @@ export const getAllShipments = async (req: Request, res: Response) => {
   try {
     const shipments = await sequelize.models.Shipment.findAll({
       order: [['shippedAt', 'DESC']],
-      include: [{ model: sequelize.models.ShipmentLine }]
+      include: [{
+        model: sequelize.models.ShipmentLine,
+        include: [
+          { model: sequelize.models.Product },
+          { model: sequelize.models.Location }
+        ]
+      }]
     });
     res.json(shipments);
   } catch (error) {
@@ -40,7 +46,7 @@ export const createShipment = async (req: Request, res: Response) => {
 
   try {
     const { customerName, shippedAt, lines } = req.body;
-    const userId = (req as any).user.sub;
+    const userId = req.user!.sub;
 
     if (!customerName || !shippedAt || !lines || !Array.isArray(lines) || lines.length === 0) {
       await t.rollback();

@@ -34,7 +34,7 @@ export const createProductionRun = async (req: Request, res: Response) => {
 
   try {
     const { productId, quantityProduced, locationId, startedAt, completedAt, notes } = req.body;
-    const userId = (req as any).user.sub;
+    const userId = req.user!.sub;
 
     if (!productId || !quantityProduced || !locationId || !startedAt || !completedAt) {
       await t.rollback();

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccess, AccessTokenPayload } from '../services/jwt';
+import { verifyAccess } from '../services/jwt';
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
@@ -11,8 +11,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = header.slice(7); // remove "Bearer "
 
   try {
-    const payload = verifyAccess(token);
-    (req as any).user = payload as AccessTokenPayload;
+    req.user = verifyAccess(token);
     return next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid or expired token' });
@@ -24,7 +23,7 @@ export const authenticate = requireAuth;
 
 export function requireRole(required: 'ADMIN' | 'ASSOCIATE') {
   return (req: Request, res: Response, next: NextFunction) => {
-    const user = (req as any).user as AccessTokenPayload | undefined;
+    const user = req.user;
 
     if (!user) {
       return res.status(401).json({ message: 'Not authenticated' });

@@ -1,4 +1,5 @@
-import express from 'express';
+import './types/express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -31,5 +32,13 @@ app.use('/production', productionRoutes);
 app.use('/shipments', shipmentRoutes);
 app.use('/inventory', inventoryRoutes);
 app.use('/audit', auditLogRoutes);
+
+// Fallbacks: unknown routes and uncaught errors respond with JSON
+// instead of the default Express HTML pages
+app.use((_req: Request, res: Response) => res.status(404).json({ error: 'Not found' }));
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
 
 export default app;

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Op } from 'sequelize';
 import { sequelize } from '../config/db';
 
 export const getAllAuditLogs = async (req: Request, res: Response) => {
@@ -12,8 +13,8 @@ export const getAllAuditLogs = async (req: Request, res: Response) => {
 
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt.$gte = new Date(startDate as string);
-      if (endDate) where.createdAt.$lte = new Date(endDate as string);
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate as string);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate as string);
     }
 
     const logs = await sequelize.models.AuditLog.findAll({
@@ -54,8 +55,8 @@ export const getAuditStats = async (req: Request, res: Response) => {
     const where: any = {};
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt.$gte = new Date(startDate as string);
-      if (endDate) where.createdAt.$lte = new Date(endDate as string);
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate as string);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate as string);
     }
 
     const logs = await sequelize.models.AuditLog.findAll({ where });
@@ -68,6 +69,16 @@ export const getAuditStats = async (req: Request, res: Response) => {
       byUser: {} as Record<number, { name: string; count: number }>
     };
 
+    // Look up all referenced users in one query
+    const userIds = [...new Set(logs.map(log => (log.get() as any).userId))];
+    const users = await sequelize.models.User.findAll({ where: { id: { [Op.in]: userIds } } });
+    const userNames = new Map<number, string>(
+      users.map(user => {
+        const userData = user.get() as any;
+        return [userData.id, userData.name];
+      })
+    );
+
     for (const log of logs) {
       const logData = log.get() as any;
 
@@ -79,9 +90,7 @@ export const getAuditStats = async (req: Request, res: Response) => {
 
       // Count by user
       if (!stats.byUser[logData.userId]) {
-        const user = await sequelize.models.User.findByPk(logData.userId);
-        const userData = user?.get() as any;
-        stats.byUser[logData.userId] = { name: userData?.name || 'Unknown', count: 0 };
+        stats.byUser[logData.userId] = { name: userNames.get(logData.userId) || 'Unknown', count: 0 };
       }
       stats.byUser[logData.userId].count++;
     }
