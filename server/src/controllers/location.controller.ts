@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
+import { logAudit } from '../services/auditLog';
 
 export const getAllLocations = async (req: Request, res: Response) => {
   try {
@@ -35,6 +36,15 @@ export const createLocation = async (req: Request, res: Response) => {
       description: description || ''
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'CREATE',
+      entityType: 'LOCATION',
+      entityId: location.get('id') as number,
+      description: `Created location ${code}`,
+      metadata: { code, description }
+    });
+
     res.status(201).json(location);
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -57,6 +67,15 @@ export const updateLocation = async (req: Request, res: Response) => {
       ...(description !== undefined && { description })
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'UPDATE',
+      entityType: 'LOCATION',
+      entityId: location.get('id') as number,
+      description: `Updated location ${location.get('code')}`,
+      metadata: { code, description }
+    });
+
     res.json(location);
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -73,7 +92,18 @@ export const deleteLocation = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Location not found' });
     }
 
+    const locationId = location.get('id') as number;
+    const locationCode = location.get('code') as string;
     await location.destroy();
+
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'DELETE',
+      entityType: 'LOCATION',
+      entityId: locationId,
+      description: `Deleted location ${locationCode}`
+    });
+
     res.json({ message: 'Location deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete location' });

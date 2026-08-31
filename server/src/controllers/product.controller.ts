@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
+import { logAudit } from '../services/auditLog';
 
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
@@ -47,6 +48,15 @@ export const createProduct = async (req: Request, res: Response) => {
       active: true
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'CREATE',
+      entityType: 'PRODUCT',
+      entityId: product.get('id') as number,
+      description: `Created product ${sku} (${name})`,
+      metadata: { sku, name, uom }
+    });
+
     res.status(201).json(product);
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -71,6 +81,15 @@ export const updateProduct = async (req: Request, res: Response) => {
       ...(active !== undefined && { active })
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'UPDATE',
+      entityType: 'PRODUCT',
+      entityId: product.get('id') as number,
+      description: `Updated product ${product.get('sku')}`,
+      metadata: { sku, name, uom, active }
+    });
+
     res.json(product);
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -89,6 +108,15 @@ export const deleteProduct = async (req: Request, res: Response) => {
 
     // Soft delete by marking as inactive
     await product.update({ active: false });
+
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'DELETE',
+      entityType: 'PRODUCT',
+      entityId: product.get('id') as number,
+      description: `Deactivated product ${product.get('sku')}`
+    });
+
     res.json({ message: 'Product deactivated successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete product' });

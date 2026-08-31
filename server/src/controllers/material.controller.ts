@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
+import { logAudit } from '../services/auditLog';
 
 export const getAllMaterials = async (req: Request, res: Response) => {
   try {
@@ -43,6 +44,15 @@ export const createMaterial = async (req: Request, res: Response) => {
       active: true
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'CREATE',
+      entityType: 'MATERIAL',
+      entityId: material.get('id') as number,
+      description: `Created material ${sku} (${name})`,
+      metadata: { sku, name, uom, minStock: minStock || 0 }
+    });
+
     res.status(201).json(material);
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -68,6 +78,15 @@ export const updateMaterial = async (req: Request, res: Response) => {
       ...(active !== undefined && { active })
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'UPDATE',
+      entityType: 'MATERIAL',
+      entityId: material.get('id') as number,
+      description: `Updated material ${material.get('sku')}`,
+      metadata: { sku, name, uom, minStock, active }
+    });
+
     res.json(material);
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
@@ -86,6 +105,15 @@ export const deleteMaterial = async (req: Request, res: Response) => {
 
     // Soft delete by marking as inactive
     await material.update({ active: false });
+
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'DELETE',
+      entityType: 'MATERIAL',
+      entityId: material.get('id') as number,
+      description: `Deactivated material ${material.get('sku')}`
+    });
+
     res.json({ message: 'Material deactivated successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete material' });
