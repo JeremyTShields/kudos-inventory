@@ -68,6 +68,22 @@ function LocationsView({ currentUserRole }: LocationsViewProps) {
     }
   };
 
+  const handleDelete = async (location: any) => {
+    if (!window.confirm(`Delete location ${location.code}? This cannot be undone.`)) {
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    try {
+      await apiClient.delete(`/locations/${location.id}`);
+      setSuccess('Location deleted successfully!');
+      loadLocations();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete location');
+    }
+  };
+
   return (
     <div className="view">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -165,8 +181,11 @@ function LocationsView({ currentUserRole }: LocationsViewProps) {
                   <td>{location.description || ''}</td>
                   {isAdmin && (
                     <td>
-                      <button onClick={() => handleEdit(location)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
+                      <button onClick={() => handleEdit(location)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>
                         Edit
+                      </button>
+                      <button onClick={() => handleDelete(location)} style={{padding: '5px 10px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
+                        Delete
                       </button>
                     </td>
                   )}

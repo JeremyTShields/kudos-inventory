@@ -6,11 +6,14 @@ function ProductionView() {
   const [productionRuns, setProductionRuns] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [workStations, setWorkStations] = useState<any[]>([]);
+  const [routing, setRouting] = useState<any[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     productId: '',
     quantityProduced: '',
     locationId: '',
+    workStationId: '',
     startedAt: new Date().toISOString().split('T')[0],
     completedAt: new Date().toISOString().split('T')[0],
     notes: ''
@@ -22,7 +25,20 @@ function ProductionView() {
     loadProductionRuns();
     loadProducts();
     loadLocations();
+    loadWorkStations();
   }, []);
+
+  // Show the selected product's routing so the operator can see which
+  // operations and work stations build it
+  useEffect(() => {
+    if (formData.productId) {
+      apiClient.get(`/routing/product/${formData.productId}`)
+        .then(response => setRouting(response.data))
+        .catch(error => console.error('Failed to load routing:', error));
+    } else {
+      setRouting([]);
+    }
+  }, [formData.productId]);
 
   const loadProductionRuns = async () => {
     try {
@@ -51,6 +67,15 @@ function ProductionView() {
     }
   };
 
+  const loadWorkStations = async () => {
+    try {
+      const response = await apiClient.get('/workstations');
+      setWorkStations(response.data.filter((s: any) => s.active));
+    } catch (error) {
+      console.error('Failed to load work stations:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -61,13 +86,15 @@ function ProductionView() {
         ...formData,
         productId: parseInt(formData.productId),
         quantityProduced: parseFloat(formData.quantityProduced),
-        locationId: parseInt(formData.locationId)
+        locationId: parseInt(formData.locationId),
+        workStationId: formData.workStationId ? parseInt(formData.workStationId) : null
       });
       setSuccess('Production run created successfully!');
       setFormData({
         productId: '',
         quantityProduced: '',
         locationId: '',
+        workStationId: '',
         startedAt: new Date().toISOString().split('T')[0],
         completedAt: new Date().toISOString().split('T')[0],
         notes: ''
@@ -121,6 +148,25 @@ function ProductionView() {
                 ))}
               </select>
             </div>
+            {routing.length > 0 && (
+              <div style={{
+                background: 'white',
+                border: '1px solid #ddd',
+                borderRadius: '5px',
+                padding: '12px 15px',
+                marginBottom: '15px'
+              }}>
+                <strong>Routing for this product:</strong>
+                <ol style={{ margin: '8px 0 0 20px', padding: 0 }}>
+                  {routing.map(step => (
+                    <li key={step.id} style={{ marginBottom: '4px' }}>
+                      {step.Operation ? `${step.Operation.code} - ${step.Operation.name}` : `Operation #${step.operationId}`}
+                      {step.Operation?.WorkStation ? ` @ ${step.Operation.WorkStation.code}` : ''}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
             <div className="form-group">
               <label>Quantity Produced:</label>
               <input
@@ -148,6 +194,25 @@ function ProductionView() {
                 <option value="">Select location...</option>
                 {locations.map(loc => (
                   <option key={loc.id} value={loc.id}>{loc.code}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Work Station (optional):</label>
+              <select
+                value={formData.workStationId}
+                onChange={(e) => setFormData({ ...formData, workStationId: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '5px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="">No work station recorded</option>
+                {workStations.map(s => (
+                  <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
                 ))}
               </select>
             </div>
@@ -215,6 +280,7 @@ function ProductionView() {
             <th>ID</th>
             <th>Product</th>
             <th>Quantity</th>
+            <th>Work Station</th>
             <th>Started</th>
             <th>Completed</th>
             <th>Notes</th>
@@ -226,6 +292,7 @@ function ProductionView() {
               <td>{run.id}</td>
               <td>{run.Product?.name || `Product #${run.productId}`}</td>
               <td>{parseFloat(run.quantityProduced).toFixed(2)}</td>
+              <td>{run.WorkStation?.code || '-'}</td>
               <td>{new Date(run.startedAt).toLocaleDateString()}</td>
               <td>{new Date(run.completedAt).toLocaleDateString()}</td>
               <td>{run.notes || '-'}</td>

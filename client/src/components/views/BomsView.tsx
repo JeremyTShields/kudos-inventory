@@ -5,8 +5,10 @@ import apiClient from '../../api/client';
 function BomsView() {
   const [products, setProducts] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
+  const [operations, setOperations] = useState<any[]>([]);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [bomItems, setBomItems] = useState<any[]>([]);
+  const [routing, setRouting] = useState<any[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     materialId: '',
@@ -14,19 +16,29 @@ function BomsView() {
   });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editQty, setEditQty] = useState('');
+  const [showAddStepForm, setShowAddStepForm] = useState(false);
+  const [stepFormData, setStepFormData] = useState({
+    operationId: '',
+    sequence: ''
+  });
+  const [editingStepId, setEditingStepId] = useState<number | null>(null);
+  const [editSequence, setEditSequence] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
     loadProducts();
     loadMaterials();
+    loadOperations();
   }, []);
 
   useEffect(() => {
     if (selectedProductId) {
       loadBom(selectedProductId);
+      loadRouting(selectedProductId);
     } else {
       setBomItems([]);
+      setRouting([]);
     }
   }, [selectedProductId]);
 
@@ -54,6 +66,69 @@ function BomsView() {
       setBomItems(response.data);
     } catch (error) {
       console.error('Failed to load BOM:', error);
+    }
+  };
+
+  const loadOperations = async () => {
+    try {
+      const response = await apiClient.get('/operations');
+      setOperations(response.data.filter((op: any) => op.active));
+    } catch (error) {
+      console.error('Failed to load operations:', error);
+    }
+  };
+
+  const loadRouting = async (productId: string) => {
+    try {
+      const response = await apiClient.get(`/routing/product/${productId}`);
+      setRouting(response.data);
+    } catch (error) {
+      console.error('Failed to load routing:', error);
+    }
+  };
+
+  const handleAddStep = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    try {
+      await apiClient.post('/routing', {
+        productId: parseInt(selectedProductId),
+        operationId: parseInt(stepFormData.operationId),
+        sequence: parseInt(stepFormData.sequence)
+      });
+      setSuccess('Routing step added successfully!');
+      setStepFormData({ operationId: '', sequence: '' });
+      setShowAddStepForm(false);
+      loadRouting(selectedProductId);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to add routing step');
+    }
+  };
+
+  const handleSaveStep = async (id: number) => {
+    setError('');
+    setSuccess('');
+    try {
+      await apiClient.put(`/routing/${id}`, { sequence: parseInt(editSequence) });
+      setEditingStepId(null);
+      setEditSequence('');
+      loadRouting(selectedProductId);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to update routing step');
+    }
+  };
+
+  const handleDeleteStep = async (id: number) => {
+    setError('');
+    setSuccess('');
+    try {
+      await apiClient.delete(`/routing/${id}`);
+      setSuccess('Routing step removed.');
+      loadRouting(selectedProductId);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to delete routing step');
     }
   };
 
@@ -270,6 +345,125 @@ function BomsView() {
         }}>
           This product has no BOM items yet. Add one to define what it consumes in production.
         </div>
+      )}
+
+      {selectedProductId && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '40px', marginBottom: '20px' }}>
+            <h3>Production Routing</h3>
+            <button
+              onClick={() => setShowAddStepForm(!showAddStepForm)}
+              className="btn-primary"
+              style={{ width: 'auto', padding: '10px 20px' }}
+            >
+              {showAddStepForm ? 'Cancel' : 'Add Routing Step'}
+            </button>
+          </div>
+
+          {showAddStepForm && (
+            <div style={{
+              background: '#f8f9fa',
+              padding: '20px',
+              borderRadius: '5px',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{ marginBottom: '15px' }}>New Routing Step</h3>
+              <form onSubmit={handleAddStep}>
+                <div className="form-group">
+                  <label>Operation:</label>
+                  <select
+                    value={stepFormData.operationId}
+                    onChange={(e) => setStepFormData({ ...stepFormData, operationId: e.target.value })}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '5px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="">Select operation...</option>
+                    {operations.map(op => (
+                      <option key={op.id} value={op.id}>
+                        {op.code} - {op.name}{op.WorkStation ? ` (${op.WorkStation.code})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Sequence:</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={stepFormData.sequence}
+                    onChange={(e) => setStepFormData({ ...stepFormData, sequence: e.target.value })}
+                    required
+                    placeholder="Order this step runs in, e.g. 1"
+                  />
+                </div>
+                <button type="submit" className="btn-primary">Add Routing Step</button>
+              </form>
+            </div>
+          )}
+
+          {routing.length > 0 ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Seq</th>
+                  <th>Operation</th>
+                  <th>Work Station</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {routing.map(step => (
+                  <tr key={step.id}>
+                    <td>
+                      {editingStepId === step.id ? (
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={editSequence}
+                          onChange={(e) => setEditSequence(e.target.value)}
+                          style={{ width: '80px', padding: '5px' }}
+                        />
+                      ) : (
+                        step.sequence
+                      )}
+                    </td>
+                    <td>{step.Operation ? `${step.Operation.code} - ${step.Operation.name}` : `Operation #${step.operationId}`}</td>
+                    <td>{step.Operation?.WorkStation ? `${step.Operation.WorkStation.code} - ${step.Operation.WorkStation.name}` : '-'}</td>
+                    <td>
+                      {editingStepId === step.id ? (
+                        <>
+                          <button onClick={() => handleSaveStep(step.id)} style={{padding: '5px 10px', background: '#28a745', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>Save</button>
+                          <button onClick={() => { setEditingStepId(null); setEditSequence(''); }} style={{padding: '5px 10px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => { setEditingStepId(step.id); setEditSequence(String(step.sequence)); }} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>Edit</button>
+                          <button onClick={() => handleDeleteStep(step.id)} style={{padding: '5px 10px', background: '#dc3545', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>Remove</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{
+              textAlign: 'center',
+              padding: '40px',
+              color: '#6c757d'
+            }}>
+              This product has no routing yet. Add steps to define which operations and work stations build it.
+            </div>
+          )}
+        </>
       )}
     </div>
   );
