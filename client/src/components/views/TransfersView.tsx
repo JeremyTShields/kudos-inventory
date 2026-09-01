@@ -6,12 +6,14 @@ function TransfersView() {
   const [transfers, setTransfers] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [wipItems, setWipItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [lotOptions, setLotOptions] = useState<Record<string, any[]>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     transferredAt: new Date().toISOString().split('T')[0],
     notes: '',
-    lines: [{ itemType: 'MATERIAL', itemId: '', qty: '', fromLocationId: '', toLocationId: '' }]
+    lines: [{ itemType: 'MATERIAL', itemId: '', qty: '', fromLocationId: '', toLocationId: '', lotId: '' }]
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -21,8 +23,32 @@ function TransfersView() {
     loadTransfers();
     loadMaterials();
     loadProducts();
+    loadWipItems();
     loadLocations();
   }, []);
+
+  const loadWipItems = async () => {
+    try {
+      const response = await apiClient.get('/wip-items');
+      setWipItems(response.data.filter((item: any) => item.active));
+    } catch (error) {
+      console.error('Failed to load WIP items:', error);
+    }
+  };
+
+  // Fetch available lots for manual-picking items once item + source are chosen
+  useEffect(() => {
+    for (const line of formData.lines) {
+      const item = itemsFor(line.itemType).find((entry: any) => entry.id === parseInt(line.itemId));
+      if (!item || item.trackingType === 'NONE' || item.lotPicking !== 'MANUAL' || !line.fromLocationId) continue;
+      const key = `${line.itemType}-${line.itemId}-${line.fromLocationId}`;
+      if (lotOptions[key]) continue;
+      apiClient.get(`/inventory/lots?itemType=${line.itemType}&itemId=${line.itemId}&locationId=${line.fromLocationId}`)
+        .then(response => setLotOptions(prev => ({ ...prev, [key]: response.data })))
+        .catch(error => console.error('Failed to load lots:', error));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.lines]);
 
   const loadTransfers = async () => {
     try {
@@ -63,7 +89,7 @@ function TransfersView() {
   const handleAddLine = () => {
     setFormData({
       ...formData,
-      lines: [...formData.lines, { itemType: 'MATERIAL', itemId: '', qty: '', fromLocationId: '', toLocationId: '' }]
+      lines: [...formData.lines, { itemType: 'MATERIAL', itemId: '', qty: '', fromLocationId: '', toLocationId: '', lotId: '' }]
     });
   };
 
@@ -79,6 +105,10 @@ function TransfersView() {
     newLines[index] = { ...newLines[index], [field]: value };
     if (field === 'itemType') {
       newLines[index].itemId = '';
+      newLines[index].lotId = '';
+    }
+    if (field === 'itemId' || field === 'fromLocationId') {
+      newLines[index].lotId = '';
     }
     setFormData({ ...formData, lines: newLines });
   };
@@ -96,14 +126,15 @@ function TransfersView() {
           itemId: parseInt(line.itemId),
           qty: parseFloat(line.qty),
           fromLocationId: parseInt(line.fromLocationId),
-          toLocationId: parseInt(line.toLocationId)
+          toLocationId: parseInt(line.toLocationId),
+          ...(line.lotId && { lotId: parseInt(line.lotId) })
         }))
       });
       setSuccess('Transfer created successfully!');
       setFormData({
         transferredAt: new Date().toISOString().split('T')[0],
         notes: '',
-        lines: [{ itemType: 'MATERIAL', itemId: '', qty: '', fromLocationId: '', toLocationId: '' }]
+        lines: [{ itemType: 'MATERIAL', itemId: '', qty: '', fromLocationId: '', toLocationId: '', lotId: '' }]
       });
       setShowAddForm(false);
       loadTransfers();
@@ -116,7 +147,8 @@ function TransfersView() {
     setExpandedTransferId(expandedTransferId === transferId ? null : transferId);
   };
 
-  const itemsFor = (itemType: string) => (itemType === 'MATERIAL' ? materials : products);
+  const itemsFor = (itemType: string) =>
+    itemType === 'MATERIAL' ? materials : itemType === 'PRODUCT' ? products : wipItems;
 
   const itemName = (line: any) => {
     const item = itemsFor(line.itemType).find((i: any) => i.id === line.itemId);
@@ -196,10 +228,11 @@ function TransfersView() {
                     >
                       <option value="MATERIAL">Material</option>
                       <option value="PRODUCT">Product</option>
+                      <option value="WIP">WIP</option>
                     </select>
                   </div>
                   <div className="form-group" style={{ margin: 0 }}>
-                    <label>{line.itemType === 'MATERIAL' ? 'Material' : 'Product'}:</label>
+                    <label>{line.itemType === 'MATERIAL' ? 'Material' : line.itemType === 'PRODUCT' ? 'Product' : 'WIP Item'}:</label>
                     <select
                       value={line.itemId}
                       onChange={(e) => handleLineChange(index, 'itemId', e.target.value)}
@@ -287,6 +320,33 @@ function TransfersView() {
                     </button>
                   )}
                 </div>
+                {(() => {
+                  const item = itemsFor(line.itemType).find((entry: any) => entry.id === parseInt(line.itemId));
+                  if (!item || item.trackingType === 'NONE' || item.lotPicking !== 'MANUAL' || !line.fromLocationId) return null;
+                  const key = `${line.itemType}-${line.itemId}-${line.fromLocationId}`;
+                  return (
+                    <div className="form-group" style={{ margin: '10px 0 0 0' }}>
+                      <label>Lot (manual picking):</label>
+                      <select
+                        value={line.lotId}
+                        onChange={(e) => handleLineChange(index, 'lotId', e.target.value)}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          border: '1px solid #ddd',
+                          borderRadius: '5px',
+                          fontSize: '14px'
+                        }}
+                      >
+                        <option value="">Select lot...</option>
+                        {(lotOptions[key] || []).map((lot: any) => (
+                          <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} ({lot.available} available)</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
 

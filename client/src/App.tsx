@@ -18,6 +18,7 @@ import TransfersView from './components/views/TransfersView';
 import WorkStationsView from './components/views/WorkStationsView';
 import OperationsView from './components/views/OperationsView';
 import BomsView from './components/views/BomsView';
+import WipItemsView from './components/views/WipItemsView';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -111,6 +112,7 @@ function App() {
         {activeView === 'workstations' && <WorkStationsView />}
         {activeView === 'operations' && <OperationsView />}
         {activeView === 'boms' && <BomsView />}
+        {activeView === 'wip' && <WipItemsView />}
       </main>
     </div>
   );

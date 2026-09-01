@@ -5,15 +5,22 @@ import apiClient from '../../api/client';
 function ProductionView() {
   const [productionRuns, setProductionRuns] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [wipItems, setWipItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [workStations, setWorkStations] = useState<any[]>([]);
   const [routing, setRouting] = useState<any[]>([]);
+  const [bomComponents, setBomComponents] = useState<any[]>([]);
+  const [lotOptions, setLotOptions] = useState<Record<string, any[]>>({});
+  const [manualPicks, setManualPicks] = useState<Record<string, string>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
+    outputType: 'PRODUCT',
     productId: '',
     quantityProduced: '',
     locationId: '',
     workStationId: '',
+    outputLotNumber: '',
+    serialNumbers: '',
     startedAt: new Date().toISOString().split('T')[0],
     completedAt: new Date().toISOString().split('T')[0],
     notes: ''
@@ -24,21 +31,46 @@ function ProductionView() {
   useEffect(() => {
     loadProductionRuns();
     loadProducts();
+    loadWipItems();
     loadLocations();
     loadWorkStations();
   }, []);
 
-  // Show the selected product's routing so the operator can see which
-  // operations and work stations build it
+  const outputItems = formData.outputType === 'PRODUCT' ? products : wipItems;
+  const outputItem = outputItems.find((item: any) => item.id === parseInt(formData.productId));
+
+  // Show the selected output's routing and BOM so the operator can see how
+  // it is built and pick lots for manual-picking components
   useEffect(() => {
+    setManualPicks({});
     if (formData.productId) {
-      apiClient.get(`/routing/product/${formData.productId}`)
+      const parentPath = formData.outputType === 'PRODUCT' ? 'product' : 'wip';
+      apiClient.get(`/routing/${parentPath}/${formData.productId}`)
         .then(response => setRouting(response.data))
         .catch(error => console.error('Failed to load routing:', error));
+      apiClient.get(`/bom/${parentPath}/${formData.productId}`)
+        .then(response => setBomComponents(response.data))
+        .catch(error => console.error('Failed to load BOM:', error));
     } else {
       setRouting([]);
+      setBomComponents([]);
     }
-  }, [formData.productId]);
+  }, [formData.productId, formData.outputType]);
+
+  const manualComponents = bomComponents.filter(component =>
+    component.Component?.trackingType !== 'NONE' && component.Component?.lotPicking === 'MANUAL');
+
+  // Fetch available lots at the chosen location for manual-picking components
+  useEffect(() => {
+    if (!formData.locationId) return;
+    for (const component of manualComponents) {
+      const key = `${component.componentType}-${component.componentId}`;
+      apiClient.get(`/inventory/lots?itemType=${component.componentType}&itemId=${component.componentId}&locationId=${formData.locationId}`)
+        .then(response => setLotOptions(prev => ({ ...prev, [key]: response.data })))
+        .catch(error => console.error('Failed to load lots:', error));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.locationId, bomComponents]);
 
   const loadProductionRuns = async () => {
     try {
@@ -55,6 +87,15 @@ function ProductionView() {
       setProducts(response.data.filter((p: any) => p.active));
     } catch (error) {
       console.error('Failed to load products:', error);
+    }
+  };
+
+  const loadWipItems = async () => {
+    try {
+      const response = await apiClient.get('/wip-items');
+      setWipItems(response.data.filter((item: any) => item.active));
+    } catch (error) {
+      console.error('Failed to load WIP items:', error);
     }
   };
 
@@ -82,23 +123,44 @@ function ProductionView() {
     setSuccess('');
 
     try {
+      const serials = formData.serialNumbers
+        .split(',')
+        .map(serial => serial.trim())
+        .filter(Boolean);
+
+      const componentLots = manualComponents
+        .filter(component => manualPicks[`${component.componentType}-${component.componentId}`])
+        .map(component => ({
+          componentType: component.componentType,
+          componentId: component.componentId,
+          lotId: parseInt(manualPicks[`${component.componentType}-${component.componentId}`]),
+          qty: parseFloat(component.qtyPerUnit) * parseFloat(formData.quantityProduced)
+        }));
+
       await apiClient.post('/production', {
         ...formData,
         productId: parseInt(formData.productId),
         quantityProduced: parseFloat(formData.quantityProduced),
         locationId: parseInt(formData.locationId),
-        workStationId: formData.workStationId ? parseInt(formData.workStationId) : null
+        workStationId: formData.workStationId ? parseInt(formData.workStationId) : null,
+        ...(formData.outputLotNumber && { outputLotNumber: formData.outputLotNumber }),
+        ...(serials.length > 0 && { serialNumbers: serials }),
+        ...(componentLots.length > 0 && { componentLots })
       });
       setSuccess('Production run created successfully!');
       setFormData({
+        outputType: 'PRODUCT',
         productId: '',
         quantityProduced: '',
         locationId: '',
         workStationId: '',
+        outputLotNumber: '',
+        serialNumbers: '',
         startedAt: new Date().toISOString().split('T')[0],
         completedAt: new Date().toISOString().split('T')[0],
         notes: ''
       });
+      setManualPicks({});
       setShowAddForm(false);
       loadProductionRuns();
     } catch (err: any) {
@@ -129,7 +191,24 @@ function ProductionView() {
           <h3 style={{ marginBottom: '15px' }}>New Production Run</h3>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Product:</label>
+              <label>Output Type:</label>
+              <select
+                value={formData.outputType}
+                onChange={(e) => setFormData({ ...formData, outputType: e.target.value, productId: '', outputLotNumber: '', serialNumbers: '' })}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '5px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="PRODUCT">Product (finished goods)</option>
+                <option value="WIP">WIP (interim product)</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>{formData.outputType === 'PRODUCT' ? 'Product' : 'WIP Item'}:</label>
               <select
                 value={formData.productId}
                 onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
@@ -142,9 +221,9 @@ function ProductionView() {
                   fontSize: '14px'
                 }}
               >
-                <option value="">Select product...</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>{p.sku} - {p.name}</option>
+                <option value="">Select {formData.outputType === 'PRODUCT' ? 'product' : 'WIP item'}...</option>
+                {outputItems.map((item: any) => (
+                  <option key={item.id} value={item.id}>{item.sku} - {item.name}</option>
                 ))}
               </select>
             </div>
@@ -216,6 +295,68 @@ function ProductionView() {
                 ))}
               </select>
             </div>
+            {outputItem?.trackingType === 'LOT' && (
+              <div className="form-group">
+                <label>Output Lot Number:</label>
+                <input
+                  type="text"
+                  value={formData.outputLotNumber}
+                  onChange={(e) => setFormData({ ...formData, outputLotNumber: e.target.value })}
+                  required
+                  placeholder="e.g., LOT-2026-001"
+                />
+              </div>
+            )}
+            {outputItem?.trackingType === 'SERIAL' && (
+              <div className="form-group">
+                <label>Output Serial Numbers (comma-separated; leave blank to auto-generate):</label>
+                <input
+                  type="text"
+                  value={formData.serialNumbers}
+                  onChange={(e) => setFormData({ ...formData, serialNumbers: e.target.value })}
+                  placeholder={`e.g., ${outputItem.serialPrefix || 'SN-'}000001 — count must match quantity`}
+                />
+              </div>
+            )}
+            {manualComponents.length > 0 && formData.locationId && (
+              <div style={{
+                background: 'white',
+                border: '1px solid #ddd',
+                borderRadius: '5px',
+                padding: '12px 15px',
+                marginBottom: '15px'
+              }}>
+                <strong>Manual lot picks (required):</strong>
+                {manualComponents.map(component => {
+                  const key = `${component.componentType}-${component.componentId}`;
+                  const required = formData.quantityProduced
+                    ? (parseFloat(component.qtyPerUnit) * parseFloat(formData.quantityProduced)).toFixed(3)
+                    : '?';
+                  return (
+                    <div key={key} className="form-group" style={{ margin: '10px 0 0 0' }}>
+                      <label>{component.Component?.sku} — need {required}:</label>
+                      <select
+                        value={manualPicks[key] || ''}
+                        onChange={(e) => setManualPicks({ ...manualPicks, [key]: e.target.value })}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          border: '1px solid #ddd',
+                          borderRadius: '5px',
+                          fontSize: '14px'
+                        }}
+                      >
+                        <option value="">Select lot...</option>
+                        {(lotOptions[key] || []).map((lot: any) => (
+                          <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} ({lot.available} available)</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="form-group">
               <label>Started At:</label>
               <input
@@ -278,7 +419,8 @@ function ProductionView() {
         <thead>
           <tr>
             <th>ID</th>
-            <th>Product</th>
+            <th>Type</th>
+            <th>Output</th>
             <th>Quantity</th>
             <th>Work Station</th>
             <th>Started</th>
@@ -290,7 +432,8 @@ function ProductionView() {
           {productionRuns.map(run => (
             <tr key={run.id}>
               <td>{run.id}</td>
-              <td>{run.Product?.name || `Product #${run.productId}`}</td>
+              <td>{run.outputType === 'WIP' ? 'WIP' : 'Product'}</td>
+              <td>{run.Product?.name || run.WipItem?.name || `#${run.productId}`}</td>
               <td>{parseFloat(run.quantityProduced).toFixed(2)}</td>
               <td>{run.WorkStation?.code || '-'}</td>
               <td>{new Date(run.startedAt).toLocaleDateString()}</td>

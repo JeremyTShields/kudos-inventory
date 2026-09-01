@@ -19,6 +19,7 @@ const INVENTORY_ITEMS: NavDropdownItem[] = [
   { key: 'locations', label: 'Warehousing' },
   { key: 'materials', label: 'Materials' },
   { key: 'products', label: 'Products' },
+  { key: 'wip', label: 'WIP' },
   { key: 'shipments', label: 'Shipping' }
 ];
 

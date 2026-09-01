@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../../api/client';
-import { trackingSuggestion } from './WipItemsView';
 
-function ProductsView() {
-  const [products, setProducts] = useState<any[]>([]);
+// Unit-like UOMs suggest serialized tracking; bulk UOMs suggest lots
+const UNIT_UOMS = ['EA', 'UNIT', 'PCS', 'PC', 'EACH'];
+
+export function trackingSuggestion(uom: string): string {
+  if (!uom) return '';
+  return UNIT_UOMS.includes(uom.trim().toUpperCase())
+    ? 'Suggestion: Serial (one number per unit) fits unit-based UOMs.'
+    : 'Suggestion: Lot (one number per batch) fits bulk UOMs.';
+}
+
+// WIP Items View
+function WipItemsView() {
+  const [items, setItems] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [showAddForm, setShowAddForm] = useState(false);
@@ -13,37 +23,36 @@ function ProductsView() {
     uom: '',
     trackingType: 'NONE',
     lotPicking: 'FIFO',
-    serialPrefix: 'SN-',
-    active: true
+    serialPrefix: 'SN-'
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
   useEffect(() => {
-    loadProducts();
+    loadItems();
   }, []);
 
-  const loadProducts = async () => {
+  const loadItems = async () => {
     try {
-      const response = await apiClient.get('/products');
-      setProducts(response.data);
+      const response = await apiClient.get('/wip-items');
+      setItems(response.data);
     } catch (error) {
-      console.error('Failed to load products:', error);
+      console.error('Failed to load WIP items:', error);
     }
   };
 
-  const handleEdit = (product: any) => {
-    setEditingId(product.id);
-    setEditForm({ ...product });
+  const handleEdit = (item: any) => {
+    setEditingId(item.id);
+    setEditForm({ ...item });
   };
 
   const handleSave = async (id: number) => {
     try {
-      await apiClient.put(`/products/${id}`, editForm);
+      await apiClient.put(`/wip-items/${id}`, editForm);
       setEditingId(null);
-      loadProducts();
+      loadItems();
     } catch (error) {
-      console.error('Failed to update product:', error);
+      console.error('Failed to update WIP item:', error);
     }
   };
 
@@ -58,28 +67,33 @@ function ProductsView() {
     setSuccess('');
 
     try {
-      await apiClient.post('/products', formData);
-      setSuccess('Product created successfully!');
-      setFormData({ sku: '', name: '', uom: '', trackingType: 'NONE', lotPicking: 'FIFO', serialPrefix: 'SN-', active: true });
+      await apiClient.post('/wip-items', formData);
+      setSuccess('WIP item created successfully!');
+      setFormData({ sku: '', name: '', uom: '', trackingType: 'NONE', lotPicking: 'FIFO', serialPrefix: 'SN-' });
       setShowAddForm(false);
-      loadProducts();
+      loadItems();
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to create product');
+      setError(err.response?.data?.error || 'Failed to create WIP item');
     }
   };
 
   return (
     <div className="view">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1>Products</h1>
+        <h1>WIP Items</h1>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
           className="btn-primary"
           style={{ width: 'auto', padding: '10px 20px' }}
         >
-          {showAddForm ? 'Cancel' : 'Add Product'}
+          {showAddForm ? 'Cancel' : 'Add WIP Item'}
         </button>
       </div>
+
+      <p style={{ color: '#6c757d', marginBottom: '20px' }}>
+        Interim product created at intermediate stages of production. WIP items are built with
+        BOMs, operations, and work stations like products, and consumed by later production runs.
+      </p>
 
       {showAddForm && (
         <div style={{
@@ -88,7 +102,7 @@ function ProductsView() {
           borderRadius: '5px',
           marginBottom: '20px'
         }}>
-          <h3 style={{ marginBottom: '15px' }}>New Product</h3>
+          <h3 style={{ marginBottom: '15px' }}>New WIP Item</h3>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>SKU:</label>
@@ -97,6 +111,7 @@ function ProductsView() {
                 value={formData.sku}
                 onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
                 required
+                placeholder="e.g., WIP-SUB-001"
               />
             </div>
             <div className="form-group">
@@ -171,23 +186,6 @@ function ProductsView() {
                 />
               </div>
             )}
-            <div className="form-group">
-              <label>Status:</label>
-              <select
-                value={formData.active ? 'true' : 'false'}
-                onChange={(e) => setFormData({ ...formData, active: e.target.value === 'true' })}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px',
-                  fontSize: '14px'
-                }}
-              >
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
-              </select>
-            </div>
 
             {error && <div className="error">{error}</div>}
             {success && <div style={{
@@ -198,7 +196,7 @@ function ProductsView() {
               marginBottom: '15px',
               textAlign: 'center'
             }}>{success}</div>}
-            <button type="submit" className="btn-primary">Create Product</button>
+            <button type="submit" className="btn-primary">Create WIP Item</button>
           </form>
         </div>
       )}
@@ -225,9 +223,9 @@ function ProductsView() {
           </tr>
         </thead>
         <tbody>
-          {products.map(product => (
-            <tr key={product.id}>
-              {editingId === product.id ? (
+          {items.map(item => (
+            <tr key={item.id}>
+              {editingId === item.id ? (
                 <>
                   <td><input value={editForm.sku} onChange={(e) => setEditForm({...editForm, sku: e.target.value})} style={{width: '100%', padding: '5px'}} /></td>
                   <td><input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} style={{width: '100%', padding: '5px'}} /></td>
@@ -250,20 +248,20 @@ function ProductsView() {
                     </select>
                   </td>
                   <td>
-                    <button onClick={() => handleSave(product.id)} style={{padding: '5px 10px', background: '#28a745', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>Save</button>
+                    <button onClick={() => handleSave(item.id)} style={{padding: '5px 10px', background: '#28a745', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer', marginRight: '5px'}}>Save</button>
                     <button onClick={handleCancel} style={{padding: '5px 10px', background: '#6c757d', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>Cancel</button>
                   </td>
                 </>
               ) : (
                 <>
-                  <td>{product.sku}</td>
-                  <td>{product.name}</td>
-                  <td>{product.uom}</td>
-                  <td>{product.trackingType === 'NONE' || !product.trackingType ? 'None' : `${product.trackingType}${product.lotPicking === 'MANUAL' ? ' / Manual pick' : ' / FIFO'}`}</td>
-                  <td>{product.active ? 'Active' : 'Inactive'}</td>
+                  <td>{item.sku}</td>
+                  <td>{item.name}</td>
+                  <td>{item.uom}</td>
+                  <td>{item.trackingType === 'NONE' ? 'None' : `${item.trackingType}${item.lotPicking === 'MANUAL' ? ' / Manual pick' : ' / FIFO'}`}</td>
+                  <td>{item.active ? 'Active' : 'Inactive'}</td>
                   <td>
-                    <button onClick={() => handleEdit(product)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
-                      ✏️ Edit
+                    <button onClick={() => handleEdit(item)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
+                      Edit
                     </button>
                   </td>
                 </>
@@ -276,4 +274,4 @@ function ProductsView() {
   );
 }
 
-export default ProductsView;
+export default WipItemsView;

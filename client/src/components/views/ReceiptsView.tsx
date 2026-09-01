@@ -9,7 +9,7 @@ function ReceiptsView() {
   const [formData, setFormData] = useState({
     supplierName: '',
     receivedAt: new Date().toISOString().split('T')[0],
-    lines: [{ materialId: '', qty: '', locationId: '' }]
+    lines: [{ materialId: '', qty: '', locationId: '', lotNumber: '', serialNumbers: '' }]
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -51,9 +51,11 @@ function ReceiptsView() {
   const handleAddLine = () => {
     setFormData({
       ...formData,
-      lines: [...formData.lines, { materialId: '', qty: '', locationId: '' }]
+      lines: [...formData.lines, { materialId: '', qty: '', locationId: '', lotNumber: '', serialNumbers: '' }]
     });
   };
+
+  const materialFor = (line: any) => materials.find((m: any) => m.id === parseInt(line.materialId));
 
   const handleRemoveLine = (index: number) => {
     setFormData({
@@ -76,17 +78,25 @@ function ReceiptsView() {
     try {
       await apiClient.post('/receipts', {
         ...formData,
-        lines: formData.lines.map(line => ({
-          materialId: parseInt(line.materialId),
-          qty: parseFloat(line.qty),
-          locationId: parseInt(line.locationId)
-        }))
+        lines: formData.lines.map(line => {
+          const serials = line.serialNumbers
+            .split(',')
+            .map(serial => serial.trim())
+            .filter(Boolean);
+          return {
+            materialId: parseInt(line.materialId),
+            qty: parseFloat(line.qty),
+            locationId: parseInt(line.locationId),
+            ...(line.lotNumber && { lotNumber: line.lotNumber }),
+            ...(serials.length > 0 && { serialNumbers: serials })
+          };
+        })
       });
       setSuccess('Receipt created successfully!');
       setFormData({
         supplierName: '',
         receivedAt: new Date().toISOString().split('T')[0],
-        lines: [{ materialId: '', qty: '', locationId: '' }]
+        lines: [{ materialId: '', qty: '', locationId: '', lotNumber: '', serialNumbers: '' }]
       });
       setShowAddForm(false);
       loadReceipts();
@@ -218,6 +228,29 @@ function ReceiptsView() {
                     </button>
                   )}
                 </div>
+                {materialFor(line)?.trackingType === 'LOT' && (
+                  <div className="form-group" style={{ margin: '10px 0 0 0' }}>
+                    <label>Lot Number:</label>
+                    <input
+                      type="text"
+                      value={line.lotNumber}
+                      onChange={(e) => handleLineChange(index, 'lotNumber', e.target.value)}
+                      required
+                      placeholder="e.g., LOT-2026-001"
+                    />
+                  </div>
+                )}
+                {materialFor(line)?.trackingType === 'SERIAL' && (
+                  <div className="form-group" style={{ margin: '10px 0 0 0' }}>
+                    <label>Serial Numbers (comma-separated; leave blank to auto-generate):</label>
+                    <input
+                      type="text"
+                      value={line.serialNumbers}
+                      onChange={(e) => handleLineChange(index, 'serialNumbers', e.target.value)}
+                      placeholder="e.g., SN-001, SN-002 — count must match quantity"
+                    />
+                  </div>
+                )}
               </div>
             ))}
 

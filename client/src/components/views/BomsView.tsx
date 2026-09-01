@@ -4,8 +4,11 @@ import apiClient from '../../api/client';
 // BOMs View
 function BomsView() {
   const [products, setProducts] = useState<any[]>([]);
+  const [wipItems, setWipItems] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [operations, setOperations] = useState<any[]>([]);
+  const [parentType, setParentType] = useState('PRODUCT');
+  const [componentType, setComponentType] = useState('MATERIAL');
   const [selectedProductId, setSelectedProductId] = useState('');
   const [bomItems, setBomItems] = useState<any[]>([]);
   const [routing, setRouting] = useState<any[]>([]);
@@ -28,9 +31,14 @@ function BomsView() {
 
   useEffect(() => {
     loadProducts();
+    loadWipItems();
     loadMaterials();
     loadOperations();
   }, []);
+
+  const parentPath = parentType === 'PRODUCT' ? 'product' : 'wip';
+  const parents = parentType === 'PRODUCT' ? products : wipItems;
+  const componentItems = componentType === 'MATERIAL' ? materials : wipItems;
 
   useEffect(() => {
     if (selectedProductId) {
@@ -40,7 +48,8 @@ function BomsView() {
       setBomItems([]);
       setRouting([]);
     }
-  }, [selectedProductId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProductId, parentType]);
 
   const loadProducts = async () => {
     try {
@@ -60,9 +69,18 @@ function BomsView() {
     }
   };
 
+  const loadWipItems = async () => {
+    try {
+      const response = await apiClient.get('/wip-items');
+      setWipItems(response.data.filter((item: any) => item.active));
+    } catch (error) {
+      console.error('Failed to load WIP items:', error);
+    }
+  };
+
   const loadBom = async (productId: string) => {
     try {
-      const response = await apiClient.get(`/bom/product/${productId}`);
+      const response = await apiClient.get(`/bom/${parentPath}/${productId}`);
       setBomItems(response.data);
     } catch (error) {
       console.error('Failed to load BOM:', error);
@@ -80,7 +98,7 @@ function BomsView() {
 
   const loadRouting = async (productId: string) => {
     try {
-      const response = await apiClient.get(`/routing/product/${productId}`);
+      const response = await apiClient.get(`/routing/${parentPath}/${productId}`);
       setRouting(response.data);
     } catch (error) {
       console.error('Failed to load routing:', error);
@@ -94,7 +112,8 @@ function BomsView() {
 
     try {
       await apiClient.post('/routing', {
-        productId: parseInt(selectedProductId),
+        parentType,
+        parentId: parseInt(selectedProductId),
         operationId: parseInt(stepFormData.operationId),
         sequence: parseInt(stepFormData.sequence)
       });
@@ -139,8 +158,10 @@ function BomsView() {
 
     try {
       await apiClient.post('/bom', {
-        productId: parseInt(selectedProductId),
-        materialId: parseInt(formData.materialId),
+        parentType,
+        parentId: parseInt(selectedProductId),
+        componentType,
+        componentId: parseInt(formData.materialId),
         qtyPerUnit: parseFloat(formData.qtyPerUnit)
       });
       setSuccess('BOM item added successfully!');
@@ -197,29 +218,54 @@ function BomsView() {
         )}
       </div>
 
-      <div className="form-group" style={{ maxWidth: '500px' }}>
-        <label>Product:</label>
-        <select
-          value={selectedProductId}
-          onChange={(e) => {
-            setSelectedProductId(e.target.value);
-            setShowAddForm(false);
-            setError('');
-            setSuccess('');
-          }}
-          style={{
-            width: '100%',
-            padding: '12px',
-            border: '1px solid #ddd',
-            borderRadius: '5px',
-            fontSize: '14px'
-          }}
-        >
-          <option value="">Select a product to view its BOM...</option>
-          {products.map(p => (
-            <option key={p.id} value={p.id}>{p.sku} - {p.name}</option>
-          ))}
-        </select>
+      <div style={{ display: 'flex', gap: '15px', maxWidth: '700px' }}>
+        <div className="form-group" style={{ flex: '0 0 200px' }}>
+          <label>Parent Type:</label>
+          <select
+            value={parentType}
+            onChange={(e) => {
+              setParentType(e.target.value);
+              setSelectedProductId('');
+              setShowAddForm(false);
+              setError('');
+              setSuccess('');
+            }}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '5px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="PRODUCT">Product</option>
+            <option value="WIP">WIP Item</option>
+          </select>
+        </div>
+        <div className="form-group" style={{ flex: 1 }}>
+          <label>{parentType === 'PRODUCT' ? 'Product' : 'WIP Item'}:</label>
+          <select
+            value={selectedProductId}
+            onChange={(e) => {
+              setSelectedProductId(e.target.value);
+              setShowAddForm(false);
+              setError('');
+              setSuccess('');
+            }}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: '1px solid #ddd',
+              borderRadius: '5px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="">Select {parentType === 'PRODUCT' ? 'a product' : 'a WIP item'} to view its BOM...</option>
+            {parents.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.sku} - {p.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {showAddForm && selectedProductId && (
@@ -232,7 +278,27 @@ function BomsView() {
           <h3 style={{ marginBottom: '15px' }}>New BOM Item</h3>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Material:</label>
+              <label>Component Type:</label>
+              <select
+                value={componentType}
+                onChange={(e) => {
+                  setComponentType(e.target.value);
+                  setFormData({ ...formData, materialId: '' });
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '5px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="MATERIAL">Material</option>
+                <option value="WIP">WIP Item</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>{componentType === 'MATERIAL' ? 'Material' : 'WIP Item'}:</label>
               <select
                 value={formData.materialId}
                 onChange={(e) => setFormData({ ...formData, materialId: e.target.value })}
@@ -245,10 +311,12 @@ function BomsView() {
                   fontSize: '14px'
                 }}
               >
-                <option value="">Select material...</option>
-                {materials.map(m => (
-                  <option key={m.id} value={m.id}>{m.sku} - {m.name}</option>
-                ))}
+                <option value="">Select {componentType === 'MATERIAL' ? 'material' : 'WIP item'}...</option>
+                {componentItems
+                  .filter((item: any) => !(parentType === 'WIP' && componentType === 'WIP' && item.id === parseInt(selectedProductId)))
+                  .map((item: any) => (
+                    <option key={item.id} value={item.id}>{item.sku} - {item.name}</option>
+                  ))}
               </select>
             </div>
             <div className="form-group">
@@ -291,8 +359,9 @@ function BomsView() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Material SKU</th>
-              <th>Material Name</th>
+              <th>Type</th>
+              <th>Component SKU</th>
+              <th>Component Name</th>
               <th>UOM</th>
               <th>Qty Per Unit</th>
               <th>Actions</th>
@@ -301,9 +370,10 @@ function BomsView() {
           <tbody>
             {bomItems.map(item => (
               <tr key={item.id}>
-                <td>{item.Material?.sku || `#${item.materialId}`}</td>
-                <td>{item.Material?.name || ''}</td>
-                <td>{item.Material?.uom || ''}</td>
+                <td>{item.componentType === 'WIP' ? 'WIP' : 'Material'}</td>
+                <td>{item.Component?.sku || `#${item.componentId}`}</td>
+                <td>{item.Component?.name || ''}</td>
+                <td>{item.Component?.uom || ''}</td>
                 <td>
                   {editingId === item.id ? (
                     <input

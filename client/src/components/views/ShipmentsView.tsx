@@ -6,11 +6,12 @@ function ShipmentsView() {
   const [shipments, setShipments] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [lotOptions, setLotOptions] = useState<Record<string, any[]>>({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     customerName: '',
     shippedAt: new Date().toISOString().split('T')[0],
-    lines: [{ productId: '', qty: '', locationId: '' }]
+    lines: [{ productId: '', qty: '', locationId: '', lotId: '' }]
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -21,6 +22,22 @@ function ShipmentsView() {
     loadProducts();
     loadLocations();
   }, []);
+
+  const productFor = (line: any) => products.find((p: any) => p.id === parseInt(line.productId));
+
+  // Fetch available lots for manual-picking products once product + location are chosen
+  useEffect(() => {
+    for (const line of formData.lines) {
+      const product = productFor(line);
+      if (!product || product.trackingType === 'NONE' || product.lotPicking !== 'MANUAL' || !line.locationId) continue;
+      const key = `${line.productId}-${line.locationId}`;
+      if (lotOptions[key]) continue;
+      apiClient.get(`/inventory/lots?itemType=PRODUCT&itemId=${line.productId}&locationId=${line.locationId}`)
+        .then(response => setLotOptions(prev => ({ ...prev, [key]: response.data })))
+        .catch(error => console.error('Failed to load lots:', error));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.lines]);
 
   const loadShipments = async () => {
     try {
@@ -52,7 +69,7 @@ function ShipmentsView() {
   const handleAddLine = () => {
     setFormData({
       ...formData,
-      lines: [...formData.lines, { productId: '', qty: '', locationId: '' }]
+      lines: [...formData.lines, { productId: '', qty: '', locationId: '', lotId: '' }]
     });
   };
 
@@ -66,6 +83,9 @@ function ShipmentsView() {
   const handleLineChange = (index: number, field: string, value: any) => {
     const newLines = [...formData.lines];
     newLines[index] = { ...newLines[index], [field]: value };
+    if (field === 'productId' || field === 'locationId') {
+      newLines[index].lotId = '';
+    }
     setFormData({ ...formData, lines: newLines });
   };
 
@@ -80,14 +100,15 @@ function ShipmentsView() {
         lines: formData.lines.map(line => ({
           productId: parseInt(line.productId),
           qty: parseFloat(line.qty),
-          locationId: parseInt(line.locationId)
+          locationId: parseInt(line.locationId),
+          ...(line.lotId && { lotId: parseInt(line.lotId) })
         }))
       });
       setSuccess('Shipment created successfully!');
       setFormData({
         customerName: '',
         shippedAt: new Date().toISOString().split('T')[0],
-        lines: [{ productId: '', qty: '', locationId: '' }]
+        lines: [{ productId: '', qty: '', locationId: '', lotId: '' }]
       });
       setShowAddForm(false);
       loadShipments();
@@ -219,6 +240,33 @@ function ShipmentsView() {
                     </button>
                   )}
                 </div>
+                {(() => {
+                  const product = productFor(line);
+                  if (!product || product.trackingType === 'NONE' || product.lotPicking !== 'MANUAL' || !line.locationId) return null;
+                  const key = `${line.productId}-${line.locationId}`;
+                  return (
+                    <div className="form-group" style={{ margin: '10px 0 0 0' }}>
+                      <label>Lot (manual picking):</label>
+                      <select
+                        value={line.lotId}
+                        onChange={(e) => handleLineChange(index, 'lotId', e.target.value)}
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          border: '1px solid #ddd',
+                          borderRadius: '5px',
+                          fontSize: '14px'
+                        }}
+                      >
+                        <option value="">Select lot...</option>
+                        {(lotOptions[key] || []).map((lot: any) => (
+                          <option key={lot.lotId} value={lot.lotId}>{lot.lotNumber} ({lot.available} available)</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
 

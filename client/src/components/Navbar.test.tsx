@@ -41,7 +41,7 @@ describe('Navbar', () => {
     const menu = screen.getByRole('menu');
     expect(menu).toBeInTheDocument();
 
-    for (const label of ['Inventory', 'Purchasing', 'Receiving', 'Transfers', 'Warehousing', 'Materials', 'Products', 'Shipping']) {
+    for (const label of ['Inventory', 'Purchasing', 'Receiving', 'Transfers', 'Warehousing', 'Materials', 'Products', 'WIP', 'Shipping']) {
       expect(screen.getByRole('menuitem', { name: label })).toBeInTheDocument();
     }
 

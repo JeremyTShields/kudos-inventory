@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../../api/client';
+import { trackingSuggestion } from './WipItemsView';
 
 function MaterialsView() {
   const [materials, setMaterials] = useState<any[]>([]);
@@ -11,6 +12,9 @@ function MaterialsView() {
     name: '',
     uom: '',
     minStock: '0',
+    trackingType: 'NONE',
+    lotPicking: 'FIFO',
+    serialPrefix: 'SN-',
     active: true
   });
   const [error, setError] = useState('');
@@ -60,7 +64,7 @@ function MaterialsView() {
         minStock: parseFloat(formData.minStock)
       });
       setSuccess('Material created successfully!');
-      setFormData({ sku: '', name: '', uom: '', minStock: '0', active: true });
+      setFormData({ sku: '', name: '', uom: '', minStock: '0', trackingType: 'NONE', lotPicking: 'FIFO', serialPrefix: 'SN-', active: true });
       setShowAddForm(false);
       loadMaterials();
     } catch (err: any) {
@@ -129,6 +133,59 @@ function MaterialsView() {
               />
             </div>
             <div className="form-group">
+              <label>Tracking:</label>
+              <select
+                value={formData.trackingType}
+                onChange={(e) => setFormData({ ...formData, trackingType: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '5px',
+                  fontSize: '14px'
+                }}
+              >
+                <option value="NONE">None</option>
+                <option value="LOT">Lot (one number per batch)</option>
+                <option value="SERIAL">Serial (one number per unit)</option>
+              </select>
+              {formData.uom && (
+                <small style={{ color: '#6c757d', marginTop: '5px', display: 'block' }}>
+                  {trackingSuggestion(formData.uom)}
+                </small>
+              )}
+            </div>
+            {formData.trackingType !== 'NONE' && (
+              <div className="form-group">
+                <label>Lot Picking:</label>
+                <select
+                  value={formData.lotPicking}
+                  onChange={(e) => setFormData({ ...formData, lotPicking: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '5px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="FIFO">FIFO (oldest lots consumed automatically)</option>
+                  <option value="MANUAL">Manual (user picks lots when consuming)</option>
+                </select>
+              </div>
+            )}
+            {formData.trackingType === 'SERIAL' && (
+              <div className="form-group">
+                <label>Serial Prefix:</label>
+                <input
+                  type="text"
+                  value={formData.serialPrefix}
+                  onChange={(e) => setFormData({ ...formData, serialPrefix: e.target.value })}
+                  placeholder="e.g., SN-"
+                />
+              </div>
+            )}
+            <div className="form-group">
               <label>Status:</label>
               <select
                 value={formData.active ? 'true' : 'false'}
@@ -177,6 +234,7 @@ function MaterialsView() {
             <th>Name</th>
             <th>UOM</th>
             <th>Min Stock</th>
+            <th>Tracking</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -190,6 +248,17 @@ function MaterialsView() {
                   <td><input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} style={{width: '100%', padding: '5px'}} /></td>
                   <td><input value={editForm.uom} onChange={(e) => setEditForm({...editForm, uom: e.target.value})} style={{width: '100%', padding: '5px'}} /></td>
                   <td><input type="number" value={editForm.minStock} onChange={(e) => setEditForm({...editForm, minStock: parseFloat(e.target.value)})} style={{width: '100%', padding: '5px'}} /></td>
+                  <td>
+                    <select value={editForm.trackingType} onChange={(e) => setEditForm({...editForm, trackingType: e.target.value})} style={{width: '100%', padding: '5px', marginBottom: '4px'}}>
+                      <option value="NONE">None</option>
+                      <option value="LOT">Lot</option>
+                      <option value="SERIAL">Serial</option>
+                    </select>
+                    <select value={editForm.lotPicking} onChange={(e) => setEditForm({...editForm, lotPicking: e.target.value})} style={{width: '100%', padding: '5px'}}>
+                      <option value="FIFO">FIFO</option>
+                      <option value="MANUAL">Manual</option>
+                    </select>
+                  </td>
                   <td>
                     <select value={editForm.active ? 'true' : 'false'} onChange={(e) => setEditForm({...editForm, active: e.target.value === 'true'})} style={{width: '100%', padding: '5px'}}>
                       <option value="true">Active</option>
@@ -207,6 +276,7 @@ function MaterialsView() {
                   <td>{material.name}</td>
                   <td>{material.uom}</td>
                   <td>{material.minStock}</td>
+                  <td>{material.trackingType === 'NONE' || !material.trackingType ? 'None' : `${material.trackingType}${material.lotPicking === 'MANUAL' ? ' / Manual pick' : ' / FIFO'}`}</td>
                   <td>{material.active ? 'Active' : 'Inactive'}</td>
                   <td>
                     <button onClick={() => handleEdit(material)} style={{padding: '5px 10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '3px', cursor: 'pointer'}}>
