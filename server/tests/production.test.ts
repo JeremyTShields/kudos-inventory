@@ -85,6 +85,66 @@ describe('POST /production', () => {
     expect(res.status).toBe(404);
   });
 
+  it('records the work station the run was performed at', async () => {
+    const station = await request(app)
+      .post('/workstations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ code: 'WS-PROD', name: 'Production Bench' });
+    expect(station.status).toBe(201);
+
+    const res = await request(app)
+      .post('/production')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        productId,
+        quantityProduced: 3,
+        locationId,
+        workStationId: station.body.id,
+        startedAt: '2026-09-01',
+        completedAt: '2026-09-02'
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.workStationId).toBe(station.body.id);
+    expect(res.body.WorkStation.code).toBe('WS-PROD');
+
+    // The runs listing carries the station too
+    const list = await request(app)
+      .get('/production')
+      .set('Authorization', `Bearer ${token}`);
+    const run = list.body.find((r: any) => r.id === res.body.id);
+    expect(run.WorkStation.code).toBe('WS-PROD');
+  });
+
+  it('rejects an unknown work station with 404', async () => {
+    const res = await request(app)
+      .post('/production')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        productId,
+        quantityProduced: 1,
+        locationId,
+        workStationId: 999999,
+        startedAt: '2026-09-01',
+        completedAt: '2026-09-02'
+      });
+    expect(res.status).toBe(404);
+  });
+
+  it('still creates runs without a work station', async () => {
+    const res = await request(app)
+      .post('/production')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        productId,
+        quantityProduced: 1,
+        locationId,
+        startedAt: '2026-09-01',
+        completedAt: '2026-09-02'
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.workStationId).toBeNull();
+  });
+
   it('rejects an unknown location with 404', async () => {
     const res = await request(app)
       .post('/production')
