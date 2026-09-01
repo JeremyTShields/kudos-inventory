@@ -192,6 +192,81 @@ describe('POST /production', () => {
     }
   });
 
+  it('produces untracked WIP output with WIP_IN and consumes its BOM', async () => {
+    const wip = await request(app)
+      .post('/wip-items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'WIP-RUN', name: 'Run Sub-Assembly', uom: 'UNIT' });
+    expect(wip.status).toBe(201);
+
+    const bom = await request(app)
+      .post('/bom')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ parentType: 'WIP', parentId: wip.body.id, componentType: 'MATERIAL', componentId: steelId, qtyPerUnit: 3 });
+    expect(bom.status).toBe(201);
+
+    const res = await request(app)
+      .post('/production')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        outputType: 'WIP',
+        productId: wip.body.id,
+        quantityProduced: 4,
+        locationId,
+        startedAt: '2026-09-01',
+        completedAt: '2026-09-02'
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.outputType).toBe('WIP');
+    expect(res.body.WipItem.sku).toBe('WIP-RUN');
+
+    const txns = await sequelize.models.InventoryTxn.findAll({
+      where: { entityType: 'PRODUCTION', entityId: res.body.id }
+    });
+    const rows = txns.map(txn => txn.get() as any);
+    const wipIn = rows.find(r => r.txnType === 'WIP_IN');
+    expect(wipIn).toBeDefined();
+    expect(parseFloat(wipIn.qty)).toBeCloseTo(4, 5);
+    const consume = rows.find(r => r.txnType === 'MATERIAL_CONSUME');
+    expect(parseFloat(consume.qty)).toBeCloseTo(-12, 5);
+  });
+
+  it('consumes WIP components via WIP_CONSUME', async () => {
+    const wip = await request(app)
+      .post('/wip-items')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'WIP-COMP', name: 'Component Sub', uom: 'UNIT' });
+    const compProduct = await request(app)
+      .post('/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'PROD-WIPUSER', name: 'WIP Consumer', uom: 'UNIT' });
+    await request(app)
+      .post('/bom')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ parentType: 'PRODUCT', parentId: compProduct.body.id, componentType: 'WIP', componentId: wip.body.id, qtyPerUnit: 2 });
+
+    const res = await request(app)
+      .post('/production')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        productId: compProduct.body.id,
+        quantityProduced: 3,
+        locationId,
+        startedAt: '2026-09-01',
+        completedAt: '2026-09-02'
+      });
+    expect(res.status).toBe(201);
+
+    const txns = await sequelize.models.InventoryTxn.findAll({
+      where: { entityType: 'PRODUCTION', entityId: res.body.id }
+    });
+    const rows = txns.map(txn => txn.get() as any);
+    const wipConsume = rows.find(r => r.txnType === 'WIP_CONSUME');
+    expect(wipConsume).toBeDefined();
+    expect(parseFloat(wipConsume.qty)).toBeCloseTo(-6, 5);
+    expect(rows.find(r => r.txnType === 'PRODUCT_IN')).toBeDefined();
+  });
+
   it('rolls back the run when a transaction insert fails mid-way', async () => {
     const runsBefore = await sequelize.models.ProductionRun.count();
     const txnsBefore = await sequelize.models.InventoryTxn.count();
