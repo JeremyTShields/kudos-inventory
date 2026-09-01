@@ -3,7 +3,7 @@ import { sequelize } from '../config/db';
 interface AuditLogParams {
   userId: number;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT';
-  entityType: 'USER' | 'MATERIAL' | 'PRODUCT' | 'LOCATION' | 'RECEIPT' | 'PRODUCTION' | 'SHIPMENT' | 'INVENTORY_ADJUSTMENT';
+  entityType: 'USER' | 'MATERIAL' | 'PRODUCT' | 'LOCATION' | 'RECEIPT' | 'PRODUCTION' | 'SHIPMENT' | 'INVENTORY_ADJUSTMENT' | 'PURCHASE_ORDER' | 'TRANSFER' | 'WORK_STATION' | 'OPERATION';
   entityId?: number;
   description: string;
   metadata?: any;

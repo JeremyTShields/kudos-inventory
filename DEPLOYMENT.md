@@ -307,6 +307,21 @@ cd server
 npm run seed
 ```
 
+### Upgrading an Existing Database
+
+New tables (`purchase_orders`, `purchase_order_lines`, `transfers`, `transfer_lines`, `work_stations`, `operations`) are created automatically by Sequelize. Two existing MySQL tables use ENUM columns that must be widened manually when upgrading a database created before the purchasing/transfers/work-stations release:
+
+```sql
+ALTER TABLE inventory_txns MODIFY txnType
+  ENUM('MATERIAL_IN','MATERIAL_CONSUME','PRODUCT_IN','PRODUCT_OUT','ADJUST','TRANSFER_IN','TRANSFER_OUT') NOT NULL;
+ALTER TABLE inventory_txns MODIFY entityType
+  ENUM('RECEIPT','PRODUCTION','SHIPMENT','MANUAL','TRANSFER') NOT NULL;
+ALTER TABLE audit_logs MODIFY entityType
+  ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION') NOT NULL;
+```
+
+SQLite development databases need no changes (ENUMs are stored as TEXT).
+
 ### Default Admin Account
 
 After seeding, you can login with:

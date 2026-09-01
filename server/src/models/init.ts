@@ -100,8 +100,8 @@ export function initModels(sequelize: Sequelize) {
 
   const InventoryTxn = sequelize.define('InventoryTxn', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
-    txnType:{ type: DataTypes.ENUM('MATERIAL_IN','MATERIAL_CONSUME','PRODUCT_IN','PRODUCT_OUT','ADJUST'), allowNull:false },
-    entityType:{ type: DataTypes.ENUM('RECEIPT','PRODUCTION','SHIPMENT','MANUAL'), allowNull:false },
+    txnType:{ type: DataTypes.ENUM('MATERIAL_IN','MATERIAL_CONSUME','PRODUCT_IN','PRODUCT_OUT','ADJUST','TRANSFER_IN','TRANSFER_OUT'), allowNull:false },
+    entityType:{ type: DataTypes.ENUM('RECEIPT','PRODUCTION','SHIPMENT','MANUAL','TRANSFER'), allowNull:false },
     entityId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT'), allowNull:false },
     itemId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
@@ -123,7 +123,7 @@ export function initModels(sequelize: Sequelize) {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
     userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     action:{ type: DataTypes.ENUM('CREATE','UPDATE','DELETE','LOGIN','LOGOUT'), allowNull:false },
-    entityType:{ type: DataTypes.ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT'), allowNull:false },
+    entityType:{ type: DataTypes.ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION'), allowNull:false },
     entityId:{ type: DataTypes.INTEGER.UNSIGNED },
     description:{ type: DataTypes.TEXT, allowNull:false },
     metadata:{ type: DataTypes.JSON }
@@ -132,8 +132,72 @@ export function initModels(sequelize: Sequelize) {
   // Audit log relationships
   AuditLog.belongsTo(User, { foreignKey:'userId' });
 
+  const PurchaseOrder = sequelize.define('PurchaseOrder', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    supplierName:{ type: DataTypes.STRING(160), allowNull:false },
+    status:{ type: DataTypes.ENUM('OPEN','RECEIVED','CANCELLED'), allowNull:false, defaultValue:'OPEN' },
+    orderedAt:{ type: DataTypes.DATE, allowNull:false },
+    notes:{ type: DataTypes.TEXT },
+    userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false }
+  }, { tableName:'purchase_orders', timestamps:true });
+
+  const PurchaseOrderLine = sequelize.define('PurchaseOrderLine', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    purchaseOrderId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    materialId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    qty:{ type: DataTypes.DECIMAL(18,3), allowNull:false }
+  }, { tableName:'purchase_order_lines', timestamps:true });
+
+  // Purchase order relationships
+  PurchaseOrder.hasMany(PurchaseOrderLine, { foreignKey:'purchaseOrderId' });
+  PurchaseOrderLine.belongsTo(Material, { foreignKey:'materialId' });
+
+  const Transfer = sequelize.define('Transfer', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    transferredAt:{ type: DataTypes.DATE, allowNull:false },
+    notes:{ type: DataTypes.TEXT }
+  }, { tableName:'transfers', timestamps:true });
+
+  const TransferLine = sequelize.define('TransferLine', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    transferId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT'), allowNull:false },
+    itemId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    qty:{ type: DataTypes.DECIMAL(18,3), allowNull:false },
+    fromLocationId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    toLocationId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false }
+  }, { tableName:'transfer_lines', timestamps:true });
+
+  // Transfer relationships
+  Transfer.hasMany(TransferLine, { foreignKey:'transferId' });
+  TransferLine.belongsTo(Location, { foreignKey:'fromLocationId', as:'FromLocation' });
+  TransferLine.belongsTo(Location, { foreignKey:'toLocationId', as:'ToLocation' });
+
+  const WorkStation = sequelize.define('WorkStation', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    code:{ type: DataTypes.STRING(32), unique:true, allowNull:false },
+    name:{ type: DataTypes.STRING(160), allowNull:false },
+    description:{ type: DataTypes.STRING(200) },
+    active:{ type: DataTypes.BOOLEAN, defaultValue:true }
+  }, { tableName:'work_stations', timestamps:true });
+
+  const Operation = sequelize.define('Operation', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    code:{ type: DataTypes.STRING(32), unique:true, allowNull:false },
+    name:{ type: DataTypes.STRING(160), allowNull:false },
+    description:{ type: DataTypes.STRING(200) },
+    workStationId:{ type: DataTypes.INTEGER.UNSIGNED },
+    active:{ type: DataTypes.BOOLEAN, defaultValue:true }
+  }, { tableName:'operations', timestamps:true });
+
+  // Operation relationships
+  Operation.belongsTo(WorkStation, { foreignKey:'workStationId' });
+  WorkStation.hasMany(Operation, { foreignKey:'workStationId' });
+
   Object.assign(sequelize.models, {
     User, Material, Product, BomItem, Location, Receipt, ReceiptLine,
-    ProductionRun, Shipment, ShipmentLine, InventoryTxn, RefreshToken, AuditLog
+    ProductionRun, Shipment, ShipmentLine, InventoryTxn, RefreshToken, AuditLog,
+    PurchaseOrder, PurchaseOrderLine, Transfer, TransferLine, WorkStation, Operation
   });
 }

@@ -4,7 +4,7 @@ import { hash } from '../services/hash';
 (async () => {
   try {
     await sequelize.sync();
-    const { User, Location, Material, Product, BomItem } = sequelize.models;
+    const { User, Location, Material, Product, BomItem, WorkStation, Operation } = sequelize.models;
 
     // Create users
     console.log('Creating users...');
@@ -147,6 +147,40 @@ import { hash } from '../services/hash';
       defaults: { qtyPerUnit: 0.2 }
     });
     console.log('✓ BOM items created');
+
+    // Create work stations
+    console.log('\nCreating work stations...');
+    const [assembly] = await WorkStation.findOrCreate({
+      where: { code: 'WS-ASSY-01' },
+      defaults: { name: 'Assembly Station 1', description: 'Primary assembly bench', active: true }
+    });
+    const [finishing] = await WorkStation.findOrCreate({
+      where: { code: 'WS-FIN-01' },
+      defaults: { name: 'Finishing Station 1', description: 'Paint and finishing booth', active: true }
+    });
+    console.log('✓ Work stations created');
+
+    // Create operations
+    console.log('\nCreating operations...');
+    await Operation.findOrCreate({
+      where: { code: 'OP-ASSY' },
+      defaults: {
+        name: 'Assemble Components',
+        description: 'Fasten and assemble parts',
+        workStationId: (assembly as any).id,
+        active: true
+      }
+    });
+    await Operation.findOrCreate({
+      where: { code: 'OP-PAINT' },
+      defaults: {
+        name: 'Paint Finish',
+        description: 'Apply finish coat',
+        workStationId: (finishing as any).id,
+        active: true
+      }
+    });
+    console.log('✓ Operations created');
 
     console.log('\n========================================');
     console.log('✅ Seed data created successfully!');
