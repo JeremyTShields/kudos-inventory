@@ -320,13 +320,55 @@ ALTER TABLE audit_logs MODIFY entityType
   ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION') NOT NULL;
 ```
 
-Production runs gained an optional work-station reference; existing databases (MySQL and SQLite alike) need the column added:
+Production runs gained an optional work-station reference and an output type; items gained lot/serial tracking configuration; BOMs and routings generalized to support WIP parents and components. Existing MySQL databases need:
 
 ```sql
 ALTER TABLE production_runs ADD COLUMN workStationId INT UNSIGNED NULL;
+ALTER TABLE production_runs ADD COLUMN outputType ENUM('PRODUCT','WIP') NOT NULL DEFAULT 'PRODUCT';
+
+ALTER TABLE materials
+  ADD COLUMN trackingType ENUM('NONE','LOT','SERIAL') NOT NULL DEFAULT 'NONE',
+  ADD COLUMN lotPicking ENUM('FIFO','MANUAL') NOT NULL DEFAULT 'FIFO',
+  ADD COLUMN serialPrefix VARCHAR(32) NOT NULL DEFAULT 'SN-',
+  ADD COLUMN serialNextSeq INT UNSIGNED NOT NULL DEFAULT 1;
+ALTER TABLE products
+  ADD COLUMN trackingType ENUM('NONE','LOT','SERIAL') NOT NULL DEFAULT 'NONE',
+  ADD COLUMN lotPicking ENUM('FIFO','MANUAL') NOT NULL DEFAULT 'FIFO',
+  ADD COLUMN serialPrefix VARCHAR(32) NOT NULL DEFAULT 'SN-',
+  ADD COLUMN serialNextSeq INT UNSIGNED NOT NULL DEFAULT 1;
+
+ALTER TABLE inventory_txns MODIFY txnType
+  ENUM('MATERIAL_IN','MATERIAL_CONSUME','PRODUCT_IN','PRODUCT_OUT','ADJUST','TRANSFER_IN','TRANSFER_OUT','WIP_IN','WIP_CONSUME') NOT NULL;
+ALTER TABLE inventory_txns MODIFY itemType ENUM('MATERIAL','PRODUCT','WIP') NOT NULL;
+ALTER TABLE inventory_txns ADD COLUMN lotId INT UNSIGNED NULL;
+ALTER TABLE transfer_lines MODIFY itemType ENUM('MATERIAL','PRODUCT','WIP') NOT NULL;
+ALTER TABLE audit_logs MODIFY entityType
+  ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION','WIP_ITEM') NOT NULL;
+
+-- BOM parents/components generalized to products or WIP
+ALTER TABLE bom_items
+  ADD COLUMN parentType ENUM('PRODUCT','WIP') NOT NULL DEFAULT 'PRODUCT',
+  ADD COLUMN parentId INT UNSIGNED NULL,
+  ADD COLUMN componentType ENUM('MATERIAL','WIP') NOT NULL DEFAULT 'MATERIAL',
+  ADD COLUMN componentId INT UNSIGNED NULL;
+UPDATE bom_items SET parentId = productId, componentId = materialId;
+ALTER TABLE bom_items
+  MODIFY parentId INT UNSIGNED NOT NULL,
+  MODIFY componentId INT UNSIGNED NOT NULL,
+  DROP COLUMN productId,
+  DROP COLUMN materialId;
+
+-- Routing parents generalized the same way
+ALTER TABLE product_operations
+  ADD COLUMN parentType ENUM('PRODUCT','WIP') NOT NULL DEFAULT 'PRODUCT',
+  ADD COLUMN parentId INT UNSIGNED NULL;
+UPDATE product_operations SET parentId = productId;
+ALTER TABLE product_operations
+  MODIFY parentId INT UNSIGNED NOT NULL,
+  DROP COLUMN productId;
 ```
 
-SQLite development databases need no other changes (ENUMs are stored as TEXT; on SQLite use `INTEGER` instead of `INT UNSIGNED` in the statement above).
+New tables (`wip_items`, `lots`) are created automatically by Sequelize. SQLite development databases: easiest is to delete `dev.sqlite` and reseed (`npm run seed`).
 
 ### Default Admin Account
 

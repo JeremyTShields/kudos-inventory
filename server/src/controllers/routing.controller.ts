@@ -2,15 +2,32 @@ import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
 import { logAudit } from '../services/auditLog';
 
+const PARENT_TYPES = ['PRODUCT', 'WIP'];
+
+const parentModel = (parentType: string) =>
+  parentType === 'PRODUCT' ? sequelize.models.Product : sequelize.models.WipItem;
+
+function normalizeParentType(raw: string): string | null {
+  const upper = String(raw || '').toUpperCase();
+  if (upper === 'PRODUCT') return 'PRODUCT';
+  if (upper === 'WIP') return 'WIP';
+  return null;
+}
+
 const routingIncludes = () => [{
   model: sequelize.models.Operation,
   include: [{ model: sequelize.models.WorkStation }]
 }];
 
-export const getRoutingByProductId = async (req: Request, res: Response) => {
+export const getRoutingByParent = async (req: Request, res: Response) => {
   try {
+    const parentType = normalizeParentType(req.params.parentType);
+    if (!parentType) {
+      return res.status(400).json({ error: 'Parent type must be product or wip' });
+    }
+
     const routing = await sequelize.models.ProductOperation.findAll({
-      where: { productId: req.params.productId },
+      where: { parentType, parentId: req.params.parentId },
       order: [['sequence', 'ASC']],
       include: routingIncludes()
     });
@@ -22,15 +39,20 @@ export const getRoutingByProductId = async (req: Request, res: Response) => {
 
 export const createRoutingStep = async (req: Request, res: Response) => {
   try {
-    const { productId, operationId, sequence } = req.body;
+    const parentType = req.body.parentType || 'PRODUCT';
+    const parentId = req.body.parentId ?? req.body.productId;
+    const { operationId, sequence } = req.body;
 
-    if (!productId || !operationId || sequence === undefined || sequence === null || sequence === '') {
-      return res.status(400).json({ error: 'Product ID, operation ID, and sequence are required' });
+    if (!parentId || !operationId || sequence === undefined || sequence === null || sequence === '') {
+      return res.status(400).json({ error: 'Parent, operation ID, and sequence are required' });
+    }
+    if (!PARENT_TYPES.includes(parentType)) {
+      return res.status(400).json({ error: 'Parent type must be PRODUCT or WIP' });
     }
 
-    const product = await sequelize.models.Product.findByPk(productId);
-    if (!product) {
-      return res.status(404).json({ error: 'Product not found' });
+    const parent = await parentModel(parentType).findByPk(parentId);
+    if (!parent) {
+      return res.status(404).json({ error: `${parentType === 'PRODUCT' ? 'Product' : 'WIP item'} not found` });
     }
     const operation = await sequelize.models.Operation.findByPk(operationId);
     if (!operation) {
@@ -38,7 +60,8 @@ export const createRoutingStep = async (req: Request, res: Response) => {
     }
 
     const step = await sequelize.models.ProductOperation.create({
-      productId,
+      parentType,
+      parentId,
       operationId,
       sequence
     });
@@ -46,10 +69,10 @@ export const createRoutingStep = async (req: Request, res: Response) => {
     await logAudit({
       userId: req.user!.sub,
       action: 'CREATE',
-      entityType: 'PRODUCT',
-      entityId: product.get('id') as number,
-      description: `Added operation ${operation.get('code')} to routing of ${product.get('sku')} at step ${sequence}`,
-      metadata: { productId, operationId, sequence }
+      entityType: parentType === 'PRODUCT' ? 'PRODUCT' : 'WIP_ITEM',
+      entityId: parent.get('id') as number,
+      description: `Added operation ${operation.get('code')} to routing of ${parent.get('sku')} at step ${sequence}`,
+      metadata: { parentType, parentId, operationId, sequence }
     });
 
     const result = await sequelize.models.ProductOperation.findByPk(step.get('id') as number, {
@@ -86,9 +109,9 @@ export const updateRoutingStep = async (req: Request, res: Response) => {
     await logAudit({
       userId: req.user!.sub,
       action: 'UPDATE',
-      entityType: 'PRODUCT',
-      entityId: step.get('productId') as number,
-      description: `Updated routing step #${step.get('id')} of product #${step.get('productId')}`,
+      entityType: step.get('parentType') === 'PRODUCT' ? 'PRODUCT' : 'WIP_ITEM',
+      entityId: step.get('parentId') as number,
+      description: `Updated routing step #${step.get('id')} of ${String(step.get('parentType')).toLowerCase()} #${step.get('parentId')}`,
       metadata: { operationId, sequence }
     });
 
@@ -109,15 +132,16 @@ export const deleteRoutingStep = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Routing step not found' });
     }
 
-    const productId = step.get('productId') as number;
+    const parentType = step.get('parentType') as string;
+    const parentId = step.get('parentId') as number;
     await step.destroy();
 
     await logAudit({
       userId: req.user!.sub,
       action: 'DELETE',
-      entityType: 'PRODUCT',
-      entityId: productId,
-      description: `Removed routing step #${req.params.id} from product #${productId}`
+      entityType: parentType === 'PRODUCT' ? 'PRODUCT' : 'WIP_ITEM',
+      entityId: parentId,
+      description: `Removed routing step #${req.params.id} from ${parentType.toLowerCase()} #${parentId}`
     });
 
     res.json({ message: 'Routing step deleted successfully' });

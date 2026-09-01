@@ -4,7 +4,7 @@ import { hash } from '../services/hash';
 (async () => {
   try {
     await sequelize.sync();
-    const { User, Location, Material, Product, BomItem, WorkStation, Operation, ProductOperation } = sequelize.models;
+    const { User, Location, Material, Product, WipItem, BomItem, WorkStation, Operation, ProductOperation } = sequelize.models;
 
     // Create users
     console.log('Creating users...');
@@ -58,6 +58,8 @@ import { hash } from '../services/hash';
         name: 'Steel Sheet 4x8',
         uom: 'SHEET',
         minStock: 50,
+        trackingType: 'LOT',
+        lotPicking: 'FIFO',
         active: true
       }
     });
@@ -97,6 +99,9 @@ import { hash } from '../services/hash';
       defaults: {
         name: 'Widget Model A1',
         uom: 'UNIT',
+        trackingType: 'SERIAL',
+        lotPicking: 'FIFO',
+        serialPrefix: 'WGT-',
         active: true
       }
     });
@@ -110,6 +115,20 @@ import { hash } from '../services/hash';
     });
     console.log('✓ Products created');
 
+    // Create WIP items
+    console.log('\nCreating WIP items...');
+    const [subAssembly] = await WipItem.findOrCreate({
+      where: { sku: 'WIP-SUB-001' },
+      defaults: {
+        name: 'Painted Sub-Assembly',
+        uom: 'UNIT',
+        trackingType: 'LOT',
+        lotPicking: 'FIFO',
+        active: true
+      }
+    });
+    console.log('✓ WIP items created');
+
     // Create BOM items
     console.log('\nCreating BOM items...');
     const widgetId = (widget as any).id;
@@ -118,34 +137,28 @@ import { hash } from '../services/hash';
     const plasticId = (plastic as any).id;
     const screwsId = (screws as any).id;
     const paintId = (paint as any).id;
+    const subAssemblyId = (subAssembly as any).id;
 
-    // BOM for Widget A1
-    await BomItem.findOrCreate({
-      where: { productId: widgetId, materialId: plasticId },
-      defaults: { qtyPerUnit: 2.5 }
-    });
-    await BomItem.findOrCreate({
-      where: { productId: widgetId, materialId: screwsId },
-      defaults: { qtyPerUnit: 8 }
-    });
-    await BomItem.findOrCreate({
-      where: { productId: widgetId, materialId: paintId },
-      defaults: { qtyPerUnit: 0.1 }
-    });
+    const ensureBomItem = async (parentType: string, parentId: number, componentType: string, componentId: number, qtyPerUnit: number) => {
+      await BomItem.findOrCreate({
+        where: { parentType, parentId, componentType, componentId },
+        defaults: { qtyPerUnit }
+      });
+    };
+
+    // BOM for Widget A1 (consumes the painted sub-assembly plus hardware)
+    await ensureBomItem('PRODUCT', widgetId, 'MATERIAL', plasticId, 2.5);
+    await ensureBomItem('PRODUCT', widgetId, 'MATERIAL', screwsId, 8);
+    await ensureBomItem('PRODUCT', widgetId, 'WIP', subAssemblyId, 1);
 
     // BOM for Panel B2
-    await BomItem.findOrCreate({
-      where: { productId: panelId, materialId: steelId },
-      defaults: { qtyPerUnit: 0.5 }
-    });
-    await BomItem.findOrCreate({
-      where: { productId: panelId, materialId: screwsId },
-      defaults: { qtyPerUnit: 12 }
-    });
-    await BomItem.findOrCreate({
-      where: { productId: panelId, materialId: paintId },
-      defaults: { qtyPerUnit: 0.2 }
-    });
+    await ensureBomItem('PRODUCT', panelId, 'MATERIAL', steelId, 0.5);
+    await ensureBomItem('PRODUCT', panelId, 'MATERIAL', screwsId, 12);
+    await ensureBomItem('PRODUCT', panelId, 'MATERIAL', paintId, 0.2);
+
+    // BOM for the painted sub-assembly itself
+    await ensureBomItem('WIP', subAssemblyId, 'MATERIAL', plasticId, 1);
+    await ensureBomItem('WIP', subAssemblyId, 'MATERIAL', paintId, 0.1);
     console.log('✓ BOM items created');
 
     // Create work stations
@@ -190,19 +203,27 @@ import { hash } from '../services/hash';
     const paintOpId = (paintOp as any).id;
 
     await ProductOperation.findOrCreate({
-      where: { productId: widgetId, operationId: assembleId },
+      where: { parentType: 'PRODUCT', parentId: widgetId, operationId: assembleId },
       defaults: { sequence: 1 }
     });
     await ProductOperation.findOrCreate({
-      where: { productId: widgetId, operationId: paintOpId },
+      where: { parentType: 'PRODUCT', parentId: widgetId, operationId: paintOpId },
       defaults: { sequence: 2 }
     });
     await ProductOperation.findOrCreate({
-      where: { productId: panelId, operationId: assembleId },
+      where: { parentType: 'PRODUCT', parentId: panelId, operationId: assembleId },
       defaults: { sequence: 1 }
     });
     await ProductOperation.findOrCreate({
-      where: { productId: panelId, operationId: paintOpId },
+      where: { parentType: 'PRODUCT', parentId: panelId, operationId: paintOpId },
+      defaults: { sequence: 2 }
+    });
+    await ProductOperation.findOrCreate({
+      where: { parentType: 'WIP', parentId: subAssemblyId, operationId: assembleId },
+      defaults: { sequence: 1 }
+    });
+    await ProductOperation.findOrCreate({
+      where: { parentType: 'WIP', parentId: subAssemblyId, operationId: paintOpId },
       defaults: { sequence: 2 }
     });
     console.log('✓ Product routings created');

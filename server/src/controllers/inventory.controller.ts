@@ -1,7 +1,19 @@
 import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
-import { Op, QueryTypes } from 'sequelize';
+import { Op, QueryTypes, Transaction } from 'sequelize';
 import { logAudit } from '../services/auditLog';
+import {
+  ITEM_TYPES,
+  ItemType,
+  LotError,
+  allocateLots,
+  generateSerials,
+  getOrCreateLot,
+  lotStock,
+  modelForItemType,
+  requireIntegerQty,
+  validateManualLot
+} from '../services/lots';
 
 export const getCurrentStock = async (req: Request, res: Response) => {
   try {
@@ -45,10 +57,8 @@ export const getCurrentStock = async (req: Request, res: Response) => {
         let itemDetails = null;
         let locationDetails = null;
 
-        if (stock.itemType === 'MATERIAL') {
-          itemDetails = await sequelize.models.Material.findByPk(stock.itemId);
-        } else if (stock.itemType === 'PRODUCT') {
-          itemDetails = await sequelize.models.Product.findByPk(stock.itemId);
+        if (ITEM_TYPES.includes(stock.itemType)) {
+          itemDetails = await modelForItemType(stock.itemType as ItemType).findByPk(stock.itemId);
         }
 
         locationDetails = await sequelize.models.Location.findByPk(stock.locationId);
@@ -72,8 +82,8 @@ export const getStockByItem = async (req: Request, res: Response) => {
   try {
     const { itemType, itemId } = req.params;
 
-    if (!['MATERIAL', 'PRODUCT'].includes(itemType)) {
-      return res.status(400).json({ error: 'Item type must be MATERIAL or PRODUCT' });
+    if (!ITEM_TYPES.includes(itemType as ItemType)) {
+      return res.status(400).json({ error: 'Item type must be MATERIAL, PRODUCT, or WIP' });
     }
 
     const query = `
@@ -104,12 +114,7 @@ export const getStockByItem = async (req: Request, res: Response) => {
     );
 
     // Get item details
-    let itemDetails = null;
-    if (itemType === 'MATERIAL') {
-      itemDetails = await sequelize.models.Material.findByPk(itemId);
-    } else {
-      itemDetails = await sequelize.models.Product.findByPk(itemId);
-    }
+    const itemDetails = await modelForItemType(itemType as ItemType).findByPk(itemId);
 
     res.json({
       itemType,
@@ -241,68 +246,168 @@ export const getUserActivity = async (req: Request, res: Response) => {
 };
 
 export const createInventoryAdjustment = async (req: Request, res: Response) => {
+  const t: Transaction = await sequelize.transaction();
+
   try {
-    const { itemType, itemId, locationId, qty, notes } = req.body;
+    const { itemType, itemId, locationId, qty, notes, lotId, lotNumber, serialNumbers } = req.body;
     const userId = req.user!.sub;
 
     if (!itemType || !itemId || !locationId || qty === undefined) {
+      await t.rollback();
       return res.status(400).json({
         error: 'Item type, item ID, location ID, and quantity are required'
       });
     }
 
-    if (!['MATERIAL', 'PRODUCT'].includes(itemType)) {
-      return res.status(400).json({ error: 'Item type must be MATERIAL or PRODUCT' });
+    if (!ITEM_TYPES.includes(itemType)) {
+      await t.rollback();
+      return res.status(400).json({ error: 'Item type must be MATERIAL, PRODUCT, or WIP' });
     }
 
     // Verify item exists
-    if (itemType === 'MATERIAL') {
-      const material = await sequelize.models.Material.findByPk(itemId);
-      if (!material) {
-        return res.status(404).json({ error: 'Material not found' });
-      }
-    } else {
-      const product = await sequelize.models.Product.findByPk(itemId);
-      if (!product) {
-        return res.status(404).json({ error: 'Product not found' });
-      }
+    const item = await modelForItemType(itemType as ItemType).findByPk(itemId);
+    if (!item) {
+      await t.rollback();
+      return res.status(404).json({ error: `${itemType === 'MATERIAL' ? 'Material' : itemType === 'PRODUCT' ? 'Product' : 'WIP item'} not found` });
     }
 
     // Verify location exists
     const location = await sequelize.models.Location.findByPk(locationId);
     if (!location) {
+      await t.rollback();
       return res.status(404).json({ error: 'Location not found' });
     }
 
-    // Create inventory adjustment transaction. Manual adjustments have no
-    // source document, so entityType is MANUAL with a placeholder entityId;
-    // the reason/notes are preserved in the audit log below.
-    const adjustment = await sequelize.models.InventoryTxn.create({
+    // Manual adjustments have no source document, so entityType is MANUAL
+    // with a placeholder entityId; the reason/notes are preserved in the
+    // audit log below. Tracked items carry lot identity like any other
+    // stock movement.
+    const parsedQty = parseFloat(qty);
+    const baseTxn = {
       txnType: 'ADJUST',
       entityType: 'MANUAL',
       entityId: 0,
       itemType,
       itemId,
-      qty: parseFloat(qty),
       locationId,
       userId,
       occurredAt: new Date()
-    });
+    };
+
+    const created: any[] = [];
+    const trackingType = item.get('trackingType') as string;
+
+    if (trackingType === 'NONE') {
+      created.push(await sequelize.models.InventoryTxn.create({ ...baseTxn, qty: parsedQty }, { transaction: t }));
+    } else if (parsedQty >= 0) {
+      // Stock entering inventory needs its lot/serial identity
+      if (trackingType === 'LOT') {
+        if (!lotNumber) {
+          throw new LotError(`${item.get('sku')} is lot-tracked: lotNumber is required for positive adjustments`);
+        }
+        const lot = await getOrCreateLot(itemType as ItemType, Number(itemId), lotNumber, t);
+        created.push(await sequelize.models.InventoryTxn.create({
+          ...baseTxn,
+          qty: parsedQty,
+          lotId: lot.get('id') as number
+        }, { transaction: t }));
+      } else {
+        const count = requireIntegerQty(parsedQty, 'Adjustment quantity');
+        let serials: string[];
+        if (Array.isArray(serialNumbers) && serialNumbers.length > 0) {
+          if (serialNumbers.length !== count || new Set(serialNumbers).size !== count) {
+            throw new LotError(`Provide ${count} unique serial numbers (got ${serialNumbers.length})`);
+          }
+          serials = serialNumbers;
+        } else {
+          serials = await generateSerials(item, count, t);
+        }
+        for (const serial of serials) {
+          const existing = await sequelize.models.Lot.findOne({
+            where: { itemType, itemId, lotNumber: serial },
+            transaction: t
+          });
+          if (existing) {
+            throw new LotError(`Serial ${serial} already exists for ${item.get('sku')}`);
+          }
+          const lot = await sequelize.models.Lot.create({ itemType, itemId, lotNumber: serial }, { transaction: t });
+          created.push(await sequelize.models.InventoryTxn.create({
+            ...baseTxn,
+            qty: 1,
+            lotId: lot.get('id') as number
+          }, { transaction: t }));
+        }
+      }
+    } else {
+      // Stock leaving inventory resolves lots like consumption does
+      const removeQty = -parsedQty;
+      if (item.get('lotPicking') === 'FIFO' && !lotId) {
+        const allocations = await allocateLots(itemType as ItemType, Number(itemId), Number(locationId), removeQty, t);
+        for (const allocation of allocations) {
+          created.push(await sequelize.models.InventoryTxn.create({
+            ...baseTxn,
+            qty: -allocation.qty,
+            lotId: allocation.lotId
+          }, { transaction: t }));
+        }
+      } else {
+        if (!lotId) {
+          throw new LotError(`${item.get('sku')} uses manual lot picking: lotId is required for negative adjustments`);
+        }
+        await validateManualLot(itemType as ItemType, Number(itemId), Number(locationId), Number(lotId), removeQty, t);
+        created.push(await sequelize.models.InventoryTxn.create({
+          ...baseTxn,
+          qty: parsedQty,
+          lotId: Number(lotId)
+        }, { transaction: t }));
+      }
+    }
+
+    await t.commit();
 
     // Log audit
-    const adjustmentId = adjustment.get('id') as number;
+    const adjustmentId = created[0].get('id') as number;
     await logAudit({
       userId,
       action: 'CREATE',
       entityType: 'INVENTORY_ADJUSTMENT',
       entityId: adjustmentId,
       description: `Manual inventory adjustment: ${itemType} #${itemId} qty ${qty > 0 ? '+' : ''}${qty}`,
-      metadata: { itemType, itemId, locationId, qty, notes }
+      metadata: { itemType, itemId, locationId, qty, notes, lotId, lotNumber }
     });
 
-    res.status(201).json(adjustment);
+    // A single-transaction adjustment keeps the original response shape;
+    // lot-split adjustments return every transaction written
+    res.status(201).json(created.length === 1 ? created[0] : created);
   } catch (error) {
+    await t.rollback();
+    if (error instanceof LotError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error(error);
     res.status(500).json({ error: 'Failed to create inventory adjustment' });
+  }
+};
+
+export const getLotStock = async (req: Request, res: Response) => {
+  try {
+    const { itemType, itemId, locationId } = req.query;
+
+    if (!itemType || !itemId) {
+      return res.status(400).json({ error: 'itemType and itemId are required' });
+    }
+    if (!ITEM_TYPES.includes(itemType as ItemType)) {
+      return res.status(400).json({ error: 'Item type must be MATERIAL, PRODUCT, or WIP' });
+    }
+
+    const rows = await lotStock(
+      itemType as ItemType,
+      parseInt(itemId as string),
+      locationId ? parseInt(locationId as string) : undefined
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch lot stock' });
   }
 };

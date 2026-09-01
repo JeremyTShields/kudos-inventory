@@ -16,6 +16,10 @@ export function initModels(sequelize: Sequelize) {
     name:{ type: DataTypes.STRING(160), allowNull:false },
     uom:{ type: DataTypes.STRING(20), allowNull:false },
     minStock:{ type: DataTypes.DECIMAL(18,3), defaultValue:0 },
+    trackingType:{ type: DataTypes.ENUM('NONE','LOT','SERIAL'), allowNull:false, defaultValue:'NONE' },
+    lotPicking:{ type: DataTypes.ENUM('FIFO','MANUAL'), allowNull:false, defaultValue:'FIFO' },
+    serialPrefix:{ type: DataTypes.STRING(32), allowNull:false, defaultValue:'SN-' },
+    serialNextSeq:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false, defaultValue:1 },
     active:{ type: DataTypes.BOOLEAN, defaultValue:true }
   }, { tableName:'materials', timestamps:true });
 
@@ -24,20 +28,47 @@ export function initModels(sequelize: Sequelize) {
     sku:{ type: DataTypes.STRING(64), unique:true, allowNull:false },
     name:{ type: DataTypes.STRING(160), allowNull:false },
     uom:{ type: DataTypes.STRING(20), allowNull:false },
+    trackingType:{ type: DataTypes.ENUM('NONE','LOT','SERIAL'), allowNull:false, defaultValue:'NONE' },
+    lotPicking:{ type: DataTypes.ENUM('FIFO','MANUAL'), allowNull:false, defaultValue:'FIFO' },
+    serialPrefix:{ type: DataTypes.STRING(32), allowNull:false, defaultValue:'SN-' },
+    serialNextSeq:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false, defaultValue:1 },
     active:{ type: DataTypes.BOOLEAN, defaultValue:true }
   }, { tableName:'products', timestamps:true });
 
+  const WipItem = sequelize.define('WipItem', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    sku:{ type: DataTypes.STRING(64), unique:true, allowNull:false },
+    name:{ type: DataTypes.STRING(160), allowNull:false },
+    uom:{ type: DataTypes.STRING(20), allowNull:false },
+    trackingType:{ type: DataTypes.ENUM('NONE','LOT','SERIAL'), allowNull:false, defaultValue:'NONE' },
+    lotPicking:{ type: DataTypes.ENUM('FIFO','MANUAL'), allowNull:false, defaultValue:'FIFO' },
+    serialPrefix:{ type: DataTypes.STRING(32), allowNull:false, defaultValue:'SN-' },
+    serialNextSeq:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false, defaultValue:1 },
+    active:{ type: DataTypes.BOOLEAN, defaultValue:true }
+  }, { tableName:'wip_items', timestamps:true });
+
+  // A lot is an identity for a tracked quantity (or a single serialized
+  // unit); quantities live in inventory_txns rows that reference it
+  const Lot = sequelize.define('Lot', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT','WIP'), allowNull:false },
+    itemId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    lotNumber:{ type: DataTypes.STRING(64), allowNull:false }
+  }, {
+    tableName:'lots',
+    timestamps:true,
+    indexes:[{ unique:true, fields:['itemType','itemId','lotNumber'] }]
+  });
+
+  // BOM parents are products or WIP items; components are materials or WIP
   const BomItem = sequelize.define('BomItem', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
-    productId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
-    materialId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    parentType:{ type: DataTypes.ENUM('PRODUCT','WIP'), allowNull:false, defaultValue:'PRODUCT' },
+    parentId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    componentType:{ type: DataTypes.ENUM('MATERIAL','WIP'), allowNull:false, defaultValue:'MATERIAL' },
+    componentId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     qtyPerUnit:{ type: DataTypes.DECIMAL(18,3), allowNull:false }
   }, { tableName:'bom_items', timestamps:true });
-
-  // BOM relationships
-  BomItem.belongsTo(Product, { foreignKey:'productId' });
-  BomItem.belongsTo(Material, { foreignKey:'materialId' });
-  Product.hasMany(BomItem, { foreignKey:'productId' });
 
   const Location = sequelize.define('Location', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
@@ -65,8 +96,11 @@ export function initModels(sequelize: Sequelize) {
   ReceiptLine.belongsTo(Material, { foreignKey:'materialId' });
   ReceiptLine.belongsTo(Location, { foreignKey:'locationId' });
 
+  // productId holds the id of the produced item; outputType says whether
+  // that is a Product or a WipItem
   const ProductionRun = sequelize.define('ProductionRun', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    outputType:{ type: DataTypes.ENUM('PRODUCT','WIP'), allowNull:false, defaultValue:'PRODUCT' },
     productId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     quantityProduced:{ type: DataTypes.DECIMAL(18,3), allowNull:false },
     userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
@@ -75,9 +109,6 @@ export function initModels(sequelize: Sequelize) {
     completedAt:{ type: DataTypes.DATE, allowNull:false },
     notes:{ type: DataTypes.TEXT }
   }, { tableName:'production_runs', timestamps:true });
-
-  // Production relationships
-  ProductionRun.belongsTo(Product, { foreignKey:'productId' });
 
   const Shipment = sequelize.define('Shipment', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
@@ -101,13 +132,14 @@ export function initModels(sequelize: Sequelize) {
 
   const InventoryTxn = sequelize.define('InventoryTxn', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
-    txnType:{ type: DataTypes.ENUM('MATERIAL_IN','MATERIAL_CONSUME','PRODUCT_IN','PRODUCT_OUT','ADJUST','TRANSFER_IN','TRANSFER_OUT'), allowNull:false },
+    txnType:{ type: DataTypes.ENUM('MATERIAL_IN','MATERIAL_CONSUME','PRODUCT_IN','PRODUCT_OUT','ADJUST','TRANSFER_IN','TRANSFER_OUT','WIP_IN','WIP_CONSUME'), allowNull:false },
     entityType:{ type: DataTypes.ENUM('RECEIPT','PRODUCTION','SHIPMENT','MANUAL','TRANSFER'), allowNull:false },
     entityId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
-    itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT'), allowNull:false },
+    itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT','WIP'), allowNull:false },
     itemId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     qty:{ type: DataTypes.DECIMAL(18,3), allowNull:false },
     locationId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    lotId:{ type: DataTypes.INTEGER.UNSIGNED },
     userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     occurredAt:{ type: DataTypes.DATE, allowNull:false }
   }, { tableName:'inventory_txns', timestamps:true });
@@ -124,7 +156,7 @@ export function initModels(sequelize: Sequelize) {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
     userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     action:{ type: DataTypes.ENUM('CREATE','UPDATE','DELETE','LOGIN','LOGOUT'), allowNull:false },
-    entityType:{ type: DataTypes.ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION'), allowNull:false },
+    entityType:{ type: DataTypes.ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION','WIP_ITEM'), allowNull:false },
     entityId:{ type: DataTypes.INTEGER.UNSIGNED },
     description:{ type: DataTypes.TEXT, allowNull:false },
     metadata:{ type: DataTypes.JSON }
@@ -163,7 +195,7 @@ export function initModels(sequelize: Sequelize) {
   const TransferLine = sequelize.define('TransferLine', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
     transferId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
-    itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT'), allowNull:false },
+    itemType:{ type: DataTypes.ENUM('MATERIAL','PRODUCT','WIP'), allowNull:false },
     itemId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     qty:{ type: DataTypes.DECIMAL(18,3), allowNull:false },
     fromLocationId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
@@ -197,21 +229,21 @@ export function initModels(sequelize: Sequelize) {
   WorkStation.hasMany(Operation, { foreignKey:'workStationId' });
   ProductionRun.belongsTo(WorkStation, { foreignKey:'workStationId' });
 
+  // Routing: a parent's build is its BOM (components) plus an ordered
+  // routing of operations, each performed at a work station. Parents are
+  // products or WIP items.
   const ProductOperation = sequelize.define('ProductOperation', {
     id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
-    productId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    parentType:{ type: DataTypes.ENUM('PRODUCT','WIP'), allowNull:false, defaultValue:'PRODUCT' },
+    parentId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     operationId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     sequence:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false }
   }, { tableName:'product_operations', timestamps:true });
 
-  // Routing relationships: a product's build is its BOM (materials) plus
-  // an ordered routing of operations, each performed at a work station
-  ProductOperation.belongsTo(Product, { foreignKey:'productId' });
   ProductOperation.belongsTo(Operation, { foreignKey:'operationId' });
-  Product.hasMany(ProductOperation, { foreignKey:'productId' });
 
   Object.assign(sequelize.models, {
-    User, Material, Product, BomItem, Location, Receipt, ReceiptLine,
+    User, Material, Product, WipItem, Lot, BomItem, Location, Receipt, ReceiptLine,
     ProductionRun, Shipment, ShipmentLine, InventoryTxn, RefreshToken, AuditLog,
     PurchaseOrder, PurchaseOrderLine, Transfer, TransferLine, WorkStation, Operation,
     ProductOperation

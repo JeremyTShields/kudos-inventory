@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
 import { Transaction } from 'sequelize';
 import { logAudit } from '../services/auditLog';
+import { LotError, generateSerials, getOrCreateLot, requireIntegerQty } from '../services/lots';
 
 export const getAllReceipts = async (req: Request, res: Response) => {
   try {
@@ -92,18 +93,63 @@ export const createReceipt = async (req: Request, res: Response) => {
         locationId
       }, { transaction: t });
 
-      // Create inventory transaction
-      await sequelize.models.InventoryTxn.create({
+      // Create inventory transactions, capturing lot/serial identity for
+      // tracked materials
+      const baseTxn = {
         txnType: 'MATERIAL_IN',
         entityType: 'RECEIPT',
         entityId: receiptId,
         itemType: 'MATERIAL',
         itemId: materialId,
-        qty,
         locationId,
         userId,
         occurredAt: new Date(receivedAt)
-      }, { transaction: t });
+      };
+
+      const trackingType = material.get('trackingType') as string;
+      if (trackingType === 'NONE') {
+        await sequelize.models.InventoryTxn.create({ ...baseTxn, qty }, { transaction: t });
+      } else if (trackingType === 'LOT') {
+        if (!line.lotNumber) {
+          throw new LotError(`${material.get('sku')} is lot-tracked: each line needs a lotNumber`);
+        }
+        const lot = await getOrCreateLot('MATERIAL', materialId, line.lotNumber, t);
+        await sequelize.models.InventoryTxn.create({
+          ...baseTxn,
+          qty,
+          lotId: lot.get('id') as number
+        }, { transaction: t });
+      } else {
+        const count = requireIntegerQty(parseFloat(qty), 'Received quantity');
+        let serials: string[];
+        if (Array.isArray(line.serialNumbers) && line.serialNumbers.length > 0) {
+          if (line.serialNumbers.length !== count || new Set(line.serialNumbers).size !== count) {
+            throw new LotError(`${material.get('sku')}: provide ${count} unique serial numbers (got ${line.serialNumbers.length})`);
+          }
+          serials = line.serialNumbers;
+        } else {
+          serials = await generateSerials(material, count, t);
+        }
+        for (const serial of serials) {
+          const existing = await sequelize.models.Lot.findOne({
+            where: { itemType: 'MATERIAL', itemId: materialId, lotNumber: serial },
+            transaction: t
+          });
+          if (existing) {
+            throw new LotError(`Serial ${serial} already exists for ${material.get('sku')}`);
+          }
+          const lot = await sequelize.models.Lot.create({
+            itemType: 'MATERIAL',
+            itemId: materialId,
+            lotNumber: serial
+          }, { transaction: t });
+          await sequelize.models.InventoryTxn.create({
+            ...baseTxn,
+            qty: 1,
+            lotId: lot.get('id') as number
+          }, { transaction: t });
+        }
+      }
     }
 
     await t.commit();
@@ -132,6 +178,9 @@ export const createReceipt = async (req: Request, res: Response) => {
     res.status(201).json(result);
   } catch (error) {
     await t.rollback();
+    if (error instanceof LotError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error(error);
     res.status(500).json({ error: 'Failed to create receipt' });
   }

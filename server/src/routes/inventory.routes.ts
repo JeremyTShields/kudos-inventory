@@ -6,7 +6,8 @@ import {
   getTransactionHistory,
   getLowStockMaterials,
   getUserActivity,
-  createInventoryAdjustment
+  createInventoryAdjustment,
+  getLotStock
 } from '../controllers/inventory.controller';
 
 const router = Router();
@@ -15,6 +16,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/stock', getCurrentStock);
+router.get('/lots', getLotStock);
 router.get('/stock/:itemType/:itemId', getStockByItem);
 router.get('/transactions', getTransactionHistory);
 router.get('/low-stock', getLowStockMaterials);

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
 import { Transaction } from 'sequelize';
 import { logAudit } from '../services/auditLog';
+import { LotError, allocateLots, validateManualLot } from '../services/lots';
 
 export const getAllShipments = async (req: Request, res: Response) => {
   try {
@@ -92,18 +93,42 @@ export const createShipment = async (req: Request, res: Response) => {
         locationId
       }, { transaction: t });
 
-      // Create inventory transaction (negative qty for outgoing)
-      await sequelize.models.InventoryTxn.create({
+      // Create inventory transactions (negative qty for outgoing),
+      // resolving lots for tracked products
+      const baseTxn = {
         txnType: 'PRODUCT_OUT',
         entityType: 'SHIPMENT',
         entityId: shipmentId,
         itemType: 'PRODUCT',
         itemId: productId,
-        qty: -qty, // Negative for outgoing
         locationId,
         userId,
         occurredAt: new Date(shippedAt)
-      }, { transaction: t });
+      };
+
+      const shippedQty = parseFloat(qty);
+      if (product.get('trackingType') === 'NONE') {
+        await sequelize.models.InventoryTxn.create({ ...baseTxn, qty: -qty }, { transaction: t });
+      } else if (product.get('lotPicking') === 'FIFO') {
+        const allocations = await allocateLots('PRODUCT', productId, locationId, shippedQty, t);
+        for (const allocation of allocations) {
+          await sequelize.models.InventoryTxn.create({
+            ...baseTxn,
+            qty: -allocation.qty,
+            lotId: allocation.lotId
+          }, { transaction: t });
+        }
+      } else {
+        if (!line.lotId) {
+          throw new LotError(`${product.get('sku')} uses manual lot picking: each line needs a lotId`);
+        }
+        await validateManualLot('PRODUCT', productId, locationId, Number(line.lotId), shippedQty, t);
+        await sequelize.models.InventoryTxn.create({
+          ...baseTxn,
+          qty: -qty,
+          lotId: Number(line.lotId)
+        }, { transaction: t });
+      }
     }
 
     await t.commit();
@@ -132,6 +157,9 @@ export const createShipment = async (req: Request, res: Response) => {
     res.status(201).json(result);
   } catch (error) {
     await t.rollback();
+    if (error instanceof LotError) {
+      return res.status(error.status).json({ error: error.message });
+    }
     console.error(error);
     res.status(500).json({ error: 'Failed to create shipment' });
   }

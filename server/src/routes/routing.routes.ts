@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
 import {
-  getRoutingByProductId,
+  getRoutingByParent,
   createRoutingStep,
   updateRoutingStep,
   deleteRoutingStep
@@ -12,7 +12,8 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
-router.get('/product/:productId', getRoutingByProductId);
+// /routing/product/:id and /routing/wip/:id both resolve through the same handler
+router.get('/:parentType/:parentId', getRoutingByParent);
 router.post('/', createRoutingStep);
 router.put('/:id', updateRoutingStep);
 router.delete('/:id', deleteRoutingStep);

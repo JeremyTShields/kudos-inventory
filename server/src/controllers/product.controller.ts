@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
 import { logAudit } from '../services/auditLog';
 
+const TRACKING_TYPES = ['NONE', 'LOT', 'SERIAL'];
+const LOT_PICKING = ['FIFO', 'MANUAL'];
+
 export const getAllProducts = async (req: Request, res: Response) => {
   try {
     const { active } = req.query;
@@ -18,12 +21,7 @@ export const getAllProducts = async (req: Request, res: Response) => {
 
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const product = await sequelize.models.Product.findByPk(req.params.id, {
-      include: [{
-        model: sequelize.models.BomItem,
-        include: [sequelize.models.Material]
-      }]
-    });
+    const product = await sequelize.models.Product.findByPk(req.params.id);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
@@ -35,16 +33,26 @@ export const getProductById = async (req: Request, res: Response) => {
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    const { sku, name, uom } = req.body;
+    const { sku, name, uom, trackingType, lotPicking, serialPrefix, serialNextSeq } = req.body;
 
     if (!sku || !name || !uom) {
       return res.status(400).json({ error: 'SKU, name, and UOM are required' });
+    }
+    if (trackingType && !TRACKING_TYPES.includes(trackingType)) {
+      return res.status(400).json({ error: 'Tracking type must be NONE, LOT, or SERIAL' });
+    }
+    if (lotPicking && !LOT_PICKING.includes(lotPicking)) {
+      return res.status(400).json({ error: 'Lot picking must be FIFO or MANUAL' });
     }
 
     const product = await sequelize.models.Product.create({
       sku,
       name,
       uom,
+      trackingType: trackingType || 'NONE',
+      lotPicking: lotPicking || 'FIFO',
+      ...(serialPrefix !== undefined && { serialPrefix }),
+      ...(serialNextSeq !== undefined && { serialNextSeq }),
       active: true
     });
 
@@ -73,11 +81,23 @@ export const updateProduct = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    const { sku, name, uom, active } = req.body;
+    const { sku, name, uom, trackingType, lotPicking, serialPrefix, serialNextSeq, active } = req.body;
+
+    if (trackingType && !TRACKING_TYPES.includes(trackingType)) {
+      return res.status(400).json({ error: 'Tracking type must be NONE, LOT, or SERIAL' });
+    }
+    if (lotPicking && !LOT_PICKING.includes(lotPicking)) {
+      return res.status(400).json({ error: 'Lot picking must be FIFO or MANUAL' });
+    }
+
     await product.update({
       ...(sku !== undefined && { sku }),
       ...(name !== undefined && { name }),
       ...(uom !== undefined && { uom }),
+      ...(trackingType !== undefined && { trackingType }),
+      ...(lotPicking !== undefined && { lotPicking }),
+      ...(serialPrefix !== undefined && { serialPrefix }),
+      ...(serialNextSeq !== undefined && { serialNextSeq }),
       ...(active !== undefined && { active })
     });
 
