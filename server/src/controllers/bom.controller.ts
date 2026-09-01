@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { sequelize } from '../config/db';
+import { logAudit } from '../services/auditLog';
 
 export const getBomByProductId = async (req: Request, res: Response) => {
   try {
@@ -41,6 +42,15 @@ export const createBomItem = async (req: Request, res: Response) => {
       qtyPerUnit
     });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'CREATE',
+      entityType: 'PRODUCT',
+      entityId: product.get('id') as number,
+      description: `Added material ${material.get('sku')} (qty/unit ${qtyPerUnit}) to BOM of ${product.get('sku')}`,
+      metadata: { productId, materialId, qtyPerUnit }
+    });
+
     const result = await sequelize.models.BomItem.findByPk(bomItem.get('id') as number, {
       include: [
         { model: sequelize.models.Material },
@@ -68,6 +78,15 @@ export const updateBomItem = async (req: Request, res: Response) => {
 
     await bomItem.update({ qtyPerUnit });
 
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'UPDATE',
+      entityType: 'PRODUCT',
+      entityId: bomItem.get('productId') as number,
+      description: `Updated BOM item #${bomItem.get('id')} of product #${bomItem.get('productId')} to qty/unit ${qtyPerUnit}`,
+      metadata: { qtyPerUnit }
+    });
+
     const result = await sequelize.models.BomItem.findByPk(req.params.id, {
       include: [
         { model: sequelize.models.Material },
@@ -88,7 +107,17 @@ export const deleteBomItem = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'BOM item not found' });
     }
 
+    const productId = bomItem.get('productId') as number;
     await bomItem.destroy();
+
+    await logAudit({
+      userId: req.user!.sub,
+      action: 'DELETE',
+      entityType: 'PRODUCT',
+      entityId: productId,
+      description: `Removed BOM item #${req.params.id} from product #${productId}`
+    });
+
     res.json({ message: 'BOM item deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete BOM item' });

@@ -4,7 +4,7 @@ import { hash } from '../services/hash';
 (async () => {
   try {
     await sequelize.sync();
-    const { User, Location, Material, Product, BomItem, WorkStation, Operation } = sequelize.models;
+    const { User, Location, Material, Product, BomItem, WorkStation, Operation, ProductOperation } = sequelize.models;
 
     // Create users
     console.log('Creating users...');
@@ -181,6 +181,31 @@ import { hash } from '../services/hash';
       }
     });
     console.log('✓ Operations created');
+
+    // Create product routings
+    console.log('\nCreating product routings...');
+    const [assemble] = await Operation.findOrCreate({ where: { code: 'OP-ASSY' } });
+    const [paintOp] = await Operation.findOrCreate({ where: { code: 'OP-PAINT' } });
+    const assembleId = (assemble as any).id;
+    const paintOpId = (paintOp as any).id;
+
+    await ProductOperation.findOrCreate({
+      where: { productId: widgetId, operationId: assembleId },
+      defaults: { sequence: 1 }
+    });
+    await ProductOperation.findOrCreate({
+      where: { productId: widgetId, operationId: paintOpId },
+      defaults: { sequence: 2 }
+    });
+    await ProductOperation.findOrCreate({
+      where: { productId: panelId, operationId: assembleId },
+      defaults: { sequence: 1 }
+    });
+    await ProductOperation.findOrCreate({
+      where: { productId: panelId, operationId: paintOpId },
+      defaults: { sequence: 2 }
+    });
+    console.log('✓ Product routings created');
 
     console.log('\n========================================');
     console.log('✅ Seed data created successfully!');

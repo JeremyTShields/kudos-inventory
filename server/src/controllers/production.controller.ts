@@ -7,7 +7,10 @@ export const getAllProductionRuns = async (req: Request, res: Response) => {
   try {
     const runs = await sequelize.models.ProductionRun.findAll({
       order: [['startedAt', 'DESC']],
-      include: [{ model: sequelize.models.Product }]
+      include: [
+        { model: sequelize.models.Product },
+        { model: sequelize.models.WorkStation }
+      ]
     });
     res.json(runs);
   } catch (error) {
@@ -18,7 +21,10 @@ export const getAllProductionRuns = async (req: Request, res: Response) => {
 export const getProductionRunById = async (req: Request, res: Response) => {
   try {
     const run = await sequelize.models.ProductionRun.findByPk(req.params.id, {
-      include: [{ model: sequelize.models.Product }]
+      include: [
+        { model: sequelize.models.Product },
+        { model: sequelize.models.WorkStation }
+      ]
     });
     if (!run) {
       return res.status(404).json({ error: 'Production run not found' });
@@ -33,7 +39,7 @@ export const createProductionRun = async (req: Request, res: Response) => {
   const t: Transaction = await sequelize.transaction();
 
   try {
-    const { productId, quantityProduced, locationId, startedAt, completedAt, notes } = req.body;
+    const { productId, quantityProduced, locationId, workStationId, startedAt, completedAt, notes } = req.body;
     const userId = req.user!.sub;
 
     if (!productId || !quantityProduced || !locationId || !startedAt || !completedAt) {
@@ -61,11 +67,21 @@ export const createProductionRun = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Location not found' });
     }
 
+    // Optionally record which work station the run was performed at
+    if (workStationId) {
+      const workStation = await sequelize.models.WorkStation.findByPk(workStationId);
+      if (!workStation) {
+        await t.rollback();
+        return res.status(404).json({ error: 'Work station not found' });
+      }
+    }
+
     // Create production run
     const productionRun = await sequelize.models.ProductionRun.create({
       productId,
       quantityProduced,
       userId,
+      workStationId: workStationId || null,
       startedAt: new Date(startedAt),
       completedAt: new Date(completedAt),
       notes: notes || ''
@@ -116,12 +132,15 @@ export const createProductionRun = async (req: Request, res: Response) => {
       entityType: 'PRODUCTION',
       entityId: runId,
       description: `Created production run for ${productData.name} (qty: ${quantityProduced})`,
-      metadata: { productId, quantityProduced, locationId }
+      metadata: { productId, quantityProduced, locationId, workStationId }
     });
 
     // Fetch the complete production run with all related data
     const result = await sequelize.models.ProductionRun.findByPk(runId, {
-      include: [{ model: sequelize.models.Product }]
+      include: [
+        { model: sequelize.models.Product },
+        { model: sequelize.models.WorkStation }
+      ]
     });
 
     res.status(201).json(result);

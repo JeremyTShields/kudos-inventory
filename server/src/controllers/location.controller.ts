@@ -94,6 +94,14 @@ export const deleteLocation = async (req: Request, res: Response) => {
 
     const locationId = location.get('id') as number;
     const locationCode = location.get('code') as string;
+
+    // A location referenced by inventory history cannot be removed, or its
+    // stock records would point at nothing
+    const txnCount = await sequelize.models.InventoryTxn.count({ where: { locationId } });
+    if (txnCount > 0) {
+      return res.status(409).json({ error: 'Location has inventory history and cannot be deleted' });
+    }
+
     await location.destroy();
 
     await logAudit({

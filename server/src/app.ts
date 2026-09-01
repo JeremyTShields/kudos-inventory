@@ -17,6 +17,7 @@ import purchaseOrderRoutes from './routes/purchaseOrder.routes';
 import transferRoutes from './routes/transfer.routes';
 import workStationRoutes from './routes/workStation.routes';
 import operationRoutes from './routes/operation.routes';
+import routingRoutes from './routes/routing.routes';
 dotenv.config();
 
 const app = express();
@@ -40,6 +41,7 @@ app.use('/purchase-orders', purchaseOrderRoutes);
 app.use('/transfers', transferRoutes);
 app.use('/workstations', workStationRoutes);
 app.use('/operations', operationRoutes);
+app.use('/routing', routingRoutes);
 
 // Fallbacks: unknown routes and uncaught errors respond with JSON
 // instead of the default Express HTML pages

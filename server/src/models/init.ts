@@ -70,6 +70,7 @@ export function initModels(sequelize: Sequelize) {
     productId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
     quantityProduced:{ type: DataTypes.DECIMAL(18,3), allowNull:false },
     userId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    workStationId:{ type: DataTypes.INTEGER.UNSIGNED },
     startedAt:{ type: DataTypes.DATE, allowNull:false },
     completedAt:{ type: DataTypes.DATE, allowNull:false },
     notes:{ type: DataTypes.TEXT }
@@ -194,10 +195,25 @@ export function initModels(sequelize: Sequelize) {
   // Operation relationships
   Operation.belongsTo(WorkStation, { foreignKey:'workStationId' });
   WorkStation.hasMany(Operation, { foreignKey:'workStationId' });
+  ProductionRun.belongsTo(WorkStation, { foreignKey:'workStationId' });
+
+  const ProductOperation = sequelize.define('ProductOperation', {
+    id:{ type: DataTypes.INTEGER.UNSIGNED, autoIncrement:true, primaryKey:true },
+    productId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    operationId:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false },
+    sequence:{ type: DataTypes.INTEGER.UNSIGNED, allowNull:false }
+  }, { tableName:'product_operations', timestamps:true });
+
+  // Routing relationships: a product's build is its BOM (materials) plus
+  // an ordered routing of operations, each performed at a work station
+  ProductOperation.belongsTo(Product, { foreignKey:'productId' });
+  ProductOperation.belongsTo(Operation, { foreignKey:'operationId' });
+  Product.hasMany(ProductOperation, { foreignKey:'productId' });
 
   Object.assign(sequelize.models, {
     User, Material, Product, BomItem, Location, Receipt, ReceiptLine,
     ProductionRun, Shipment, ShipmentLine, InventoryTxn, RefreshToken, AuditLog,
-    PurchaseOrder, PurchaseOrderLine, Transfer, TransferLine, WorkStation, Operation
+    PurchaseOrder, PurchaseOrderLine, Transfer, TransferLine, WorkStation, Operation,
+    ProductOperation
   });
 }

@@ -320,7 +320,13 @@ ALTER TABLE audit_logs MODIFY entityType
   ENUM('USER','MATERIAL','PRODUCT','LOCATION','RECEIPT','PRODUCTION','SHIPMENT','INVENTORY_ADJUSTMENT','PURCHASE_ORDER','TRANSFER','WORK_STATION','OPERATION') NOT NULL;
 ```
 
-SQLite development databases need no changes (ENUMs are stored as TEXT).
+Production runs gained an optional work-station reference; existing databases (MySQL and SQLite alike) need the column added:
+
+```sql
+ALTER TABLE production_runs ADD COLUMN workStationId INT UNSIGNED NULL;
+```
+
+SQLite development databases need no other changes (ENUMs are stored as TEXT; on SQLite use `INTEGER` instead of `INT UNSIGNED` in the statement above).
 
 ### Default Admin Account
 
