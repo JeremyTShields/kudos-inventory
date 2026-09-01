@@ -1,4 +1,6 @@
 import type { User } from '../types';
+import NavDropdown from './NavDropdown';
+import type { NavDropdownItem } from './NavDropdown';
 
 interface NavbarProps {
   user: User | null;
@@ -9,7 +11,30 @@ interface NavbarProps {
   handleLogout: () => void;
 }
 
+const INVENTORY_ITEMS: NavDropdownItem[] = [
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'purchasing', label: 'Purchasing' },
+  { key: 'receipts', label: 'Receiving' },
+  { key: 'transfers', label: 'Transfers' },
+  { key: 'locations', label: 'Warehousing' },
+  { key: 'materials', label: 'Materials' },
+  { key: 'products', label: 'Products' },
+  { key: 'shipments', label: 'Shipping' }
+];
+
+const PRODUCTION_ITEMS: NavDropdownItem[] = [
+  { key: 'workstations', label: 'Work Stations' },
+  { key: 'boms', label: 'BOMs' },
+  { key: 'operations', label: 'Operations' },
+  { key: 'production', label: 'Production Runs' }
+];
+
 function Navbar({ user, activeView, setActiveView, darkMode, toggleDarkMode, handleLogout }: NavbarProps) {
+  const settingsItems: NavDropdownItem[] = [
+    { key: 'users', label: 'Users' },
+    ...(user?.role === 'ADMIN' ? [{ key: 'audit', label: 'Audit Logs' }] : [])
+  ];
+
   return (
     <nav className="navbar">
       <div className="nav-brand">
@@ -20,35 +45,9 @@ function Navbar({ user, activeView, setActiveView, darkMode, toggleDarkMode, han
         <button onClick={() => setActiveView('dashboard')} className={activeView === 'dashboard' ? 'active' : ''}>
           Dashboard
         </button>
-        <button onClick={() => setActiveView('materials')} className={activeView === 'materials' ? 'active' : ''}>
-          Materials
-        </button>
-        <button onClick={() => setActiveView('products')} className={activeView === 'products' ? 'active' : ''}>
-          Products
-        </button>
-        <button onClick={() => setActiveView('receipts')} className={activeView === 'receipts' ? 'active' : ''}>
-          Receive
-        </button>
-        <button onClick={() => setActiveView('production')} className={activeView === 'production' ? 'active' : ''}>
-          Production
-        </button>
-        <button onClick={() => setActiveView('shipments')} className={activeView === 'shipments' ? 'active' : ''}>
-          Ship
-        </button>
-        <button onClick={() => setActiveView('inventory')} className={activeView === 'inventory' ? 'active' : ''}>
-          Inventory
-        </button>
-        <button onClick={() => setActiveView('locations')} className={activeView === 'locations' ? 'active' : ''}>
-          Locations
-        </button>
-        <button onClick={() => setActiveView('users')} className={activeView === 'users' ? 'active' : ''}>
-          Users
-        </button>
-        {user?.role === 'ADMIN' && (
-          <button onClick={() => setActiveView('audit')} className={activeView === 'audit' ? 'active' : ''}>
-            Audit Log
-          </button>
-        )}
+        <NavDropdown label="Inventory" items={INVENTORY_ITEMS} activeView={activeView} onSelect={setActiveView} />
+        <NavDropdown label="Production" items={PRODUCTION_ITEMS} activeView={activeView} onSelect={setActiveView} />
+        <NavDropdown label="Settings" items={settingsItems} activeView={activeView} onSelect={setActiveView} />
       </div>
       <div className="nav-user">
         <button onClick={toggleDarkMode} className="btn-theme-toggle" title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>

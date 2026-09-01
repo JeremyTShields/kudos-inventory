@@ -13,6 +13,11 @@ import InventoryView from './components/views/InventoryView';
 import LocationsView from './components/views/LocationsView';
 import UsersView from './components/views/UsersView';
 import AuditLogView from './components/views/AuditLogView';
+import PurchasingView from './components/views/PurchasingView';
+import TransfersView from './components/views/TransfersView';
+import WorkStationsView from './components/views/WorkStationsView';
+import OperationsView from './components/views/OperationsView';
+import BomsView from './components/views/BomsView';
 
 function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -101,6 +106,11 @@ function App() {
         {activeView === 'locations' && <LocationsView currentUserRole={user?.role} />}
         {activeView === 'users' && <UsersView currentUserRole={user?.role} />}
         {activeView === 'audit' && user?.role === 'ADMIN' && <AuditLogView />}
+        {activeView === 'purchasing' && <PurchasingView />}
+        {activeView === 'transfers' && <TransfersView />}
+        {activeView === 'workstations' && <WorkStationsView />}
+        {activeView === 'operations' && <OperationsView />}
+        {activeView === 'boms' && <BomsView />}
       </main>
     </div>
   );
